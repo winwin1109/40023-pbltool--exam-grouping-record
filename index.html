@@ -1,0 +1,2311 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>專題研習進度與評分紀錄</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'PingFang HK', 'Microsoft JhengHei', 'PMingLiU', sans-serif;
+            background-color: #f4f6f8;
+            color: #111;
+        }
+        /* 模擬附件「分組紀錄」的 Excel 表格視覺樣式 */
+        .sheet-container {
+            overflow-x: auto;
+            max-width: 100%;
+            background: white;
+            border: 2px solid #000;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+        }
+        table.excel-table {
+            border-collapse: collapse;
+            width: max-content;
+            min-width: 100%;
+            font-size: 13.5px;
+        }
+        table.excel-table th,
+        table.excel-table td {
+            border: 1px solid #222;
+            padding: 6px 8px;
+            vertical-align: middle;
+        }
+        /* 附件藍灰色表頭 */
+        table.excel-table thead th {
+            background-color: #b4d3e3;
+            color: #000;
+            font-weight: 800;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            box-shadow: inset 0 -1px 0 #000;
+        }
+        /* 每組之間的粗黑分隔線 */
+        tr.group-last-row td {
+            border-bottom: 2.5px solid #000 !important;
+        }
+        tr.group-first-row td {
+            border-top: 2px solid #000;
+        }
+        /* 附件特色字體顏色 */
+        .txt-red { color: #c00000; font-weight: 700; }
+        .txt-blue { color: #0066cc; font-weight: 700; }
+        .txt-green { color: #008000; font-weight: 700; }
+        .txt-orange { color: #c55a11; font-weight: 700; }
+        .txt-pink { color: #d66060; font-weight: 700; }
+
+        /* 表單輸入控制項 */
+        .cell-input {
+            width: 100%;
+            border: 1px solid transparent;
+            background: transparent;
+            padding: 3px 5px;
+            border-radius: 4px;
+            transition: all 0.15s;
+        }
+        .cell-input:hover {
+            border-color: #cbd5e1;
+            background: #f8fafc;
+        }
+        .cell-input:focus {
+            outline: none;
+            border-color: #2563eb;
+            background: #fff;
+            box-shadow: 0 0 0 2px rgba(37,99,235,0.15);
+        }
+        .cell-select {
+            width: 100%;
+            border: 1px solid #94a3b8;
+            border-radius: 4px;
+            padding: 3px 4px;
+            background-color: #fff;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .cell-select:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+        /* 批量操作小按鈕 */
+        .batch-btn {
+            font-size: 11px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            border: 1px solid #334155;
+            background: #fff;
+            cursor: pointer;
+            font-weight: 700;
+            transition: 0.15s;
+        }
+        .batch-btn:hover {
+            background: #1e293b;
+            color: #fff;
+        }
+        /* 凍結左側組別與姓名欄方便橫向捲動 */
+        .sticky-col-1 {
+            position: sticky;
+            left: 0;
+            z-index: 10;
+            background-color: #fff;
+        }
+        .sticky-col-2 {
+            position: sticky;
+            left: 110px;
+            z-index: 10;
+            background-color: #fff;
+        }
+        thead th.sticky-col-1,
+        thead th.sticky-col-2 {
+            z-index: 30;
+            background-color: #b4d3e3;
+        }
+
+        /* 標籤按鈕樣式 */
+        .comment-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 12.5px;
+            font-weight: 600;
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            color: #1e293b;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-align: left;
+            line-height: 1.35;
+        }
+        .comment-chip:hover {
+            border-color: #3b82f6;
+            background: #eff6ff;
+        }
+        .comment-chip.active {
+            background: #1d4ed8;
+            color: #ffffff;
+            border-color: #1e40af;
+            box-shadow: 0 2px 5px rgba(29, 78, 216, 0.25);
+        }
+
+        /* 檢視模式切換按鈕 */
+        .view-mode-btn {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-weight: 800;
+            border: 1px solid #1e293b;
+            background: #ffffff;
+            color: #1e293b;
+            transition: all 0.15s;
+            cursor: pointer;
+        }
+        .view-mode-btn:hover {
+            background: #f1f5f9;
+        }
+        .view-mode-btn.active {
+            background: #1e293b;
+            color: #ffffff;
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            .sheet-container { overflow: visible; border: 1px solid #000; }
+            body { background: #fff; padding: 0; }
+        }
+    </style>
+    <style id="dynamic-col-visibility-style"></style>
+</head>
+<body class="p-3 md:p-6">
+
+    <!-- 頂部標題與全域控制列 -->
+    <div class="mb-3 bg-white border-2 border-black p-4 shadow-sm flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+        <div>
+            <div class="flex items-center gap-3">
+                <span class="bg-red-700 text-white text-xs font-black px-2.5 py-1 rounded tracking-wider">PBL 課堂與匯報評核系統</span>
+                <span class="text-xs font-bold text-slate-600">支援欄位隱藏／檢視切換 + 自訂勾選欄位計分 + 分論點針對性評語庫</span>
+            </div>
+            <h1 class="text-2xl md:text-3xl font-black tracking-tight text-black mt-1">專題研習進度與評分紀錄</h1>
+        </div>
+
+        <!-- 統一題目選擇與工具按鈕 -->
+        <div class="flex flex-wrap items-center gap-2.5 w-full xl:w-auto no-print">
+            <div class="flex items-center gap-2 bg-[#b4d3e3] border border-black px-3 py-1.5 rounded">
+                <label for="global-topic-select" class="text-xs font-black text-red-800 whitespace-nowrap">統一選擇專題題目：</label>
+                <select id="global-topic-select" onchange="handleGlobalTopicChange(this.value)" class="text-sm font-bold bg-white border border-black rounded px-2 py-1 text-red-700 focus:outline-none">
+                </select>
+            </div>
+
+            <button onclick="openBatchRosterModal()" class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3 py-2 rounded border border-black shadow-sm transition flex items-center gap-1">
+                <span>📋</span> 批量貼上全班/多組名單
+            </button>
+            <button onclick="addNewGroup()" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3 py-2 rounded border border-black shadow-sm transition">
+                ＋ 新增組別
+            </button>
+            <button onclick="exportToExcel()" class="bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs px-3 py-2 rounded border border-black shadow-sm transition">
+                📥 匯出 Excel (.xls)
+            </button>
+            <button onclick="window.print()" class="bg-slate-800 hover:bg-black text-white font-bold text-xs px-3 py-2 rounded border border-black shadow-sm transition">
+                🖨️ 列印 / 存為 PDF
+            </button>
+            <button onclick="resetDemoData()" class="bg-white hover:bg-red-50 text-red-700 font-bold text-xs px-3 py-2 rounded border border-red-700 transition">
+                🔄 重置範例
+            </button>
+        </div>
+    </div>
+
+    <!-- 顯示欄位與計分組合控制列 -->
+    <div class="mb-3 bg-white border-2 border-black p-3 shadow-xs space-y-2.5 no-print">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <!-- 恢復「顯示欄位：全部 (1-18欄) / 平時功課 (1-12欄) / 口頭匯報 (1-7, 12-18欄)」功能 -->
+            <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-xs font-black text-slate-900 mr-1">👁️ 顯示欄位：</span>
+                <button id="view-btn-all" onclick="applyViewPreset('all')" class="view-mode-btn active">
+                    全部 (1-18欄)
+                </button>
+                <button id="view-btn-hw" onclick="applyViewPreset('hw')" class="view-mode-btn">
+                    平時功課 (1-12欄)
+                </button>
+                <button id="view-btn-oral" onclick="applyViewPreset('oral')" class="view-mode-btn">
+                    口頭匯報 (1-7, 12-18欄)
+                </button>
+                <button onclick="toggleCustomColumnDrawer()" class="text-xs font-bold px-2.5 py-1 rounded border border-slate-400 bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center gap-1 ml-1">
+                    <span>⚙️ 自訂隱藏/顯示單一欄位</span>
+                    <span id="hidden-col-badge" class="hidden bg-red-600 text-white text-[10px] px-1.5 py-0.2 rounded-full">0</span>
+                </button>
+            </div>
+
+            <!-- 根據選擇欄位計算分數功能 -->
+            <div class="flex flex-wrap items-center gap-2 bg-blue-50 border border-blue-300 px-3 py-1.5 rounded-lg">
+                <span class="text-xs font-black text-blue-950">🧮 納入「總分小計(第12欄)」計算的欄位：</span>
+                <label class="inline-flex items-center gap-1 text-xs font-bold text-slate-800 cursor-pointer hover:text-blue-700">
+                    <input type="checkbox" id="score-chk-hw1" onchange="toggleScoreCalcField('hw1', this.checked)" class="accent-blue-700 w-3.5 h-3.5 cursor-pointer" checked>
+                    <span>8.作業一(±3)</span>
+                </label>
+                <label class="inline-flex items-center gap-1 text-xs font-bold text-slate-800 cursor-pointer hover:text-blue-700">
+                    <input type="checkbox" id="score-chk-hw2" onchange="toggleScoreCalcField('hw2', this.checked)" class="accent-blue-700 w-3.5 h-3.5 cursor-pointer" checked>
+                    <span>9.作業二(±3)</span>
+                </label>
+                <label class="inline-flex items-center gap-1 text-xs font-bold text-slate-800 cursor-pointer hover:text-blue-700">
+                    <input type="checkbox" id="score-chk-hw3" onchange="toggleScoreCalcField('hw3', this.checked)" class="accent-blue-700 w-3.5 h-3.5 cursor-pointer" checked>
+                    <span>10.作業三(0-4)</span>
+                </label>
+                <label class="inline-flex items-center gap-1 text-xs font-bold text-slate-800 cursor-pointer hover:text-blue-700">
+                    <input type="checkbox" id="score-chk-ea1" onchange="toggleScoreCalcField('ea1', this.checked)" class="accent-blue-700 w-3.5 h-3.5 cursor-pointer" checked>
+                    <span>11.小組初稿EA1(0-10)</span>
+                </label>
+                <label class="inline-flex items-center gap-1 text-xs font-bold text-indigo-800 cursor-pointer hover:text-indigo-950 border-l border-blue-300 pl-2">
+                    <input type="checkbox" id="score-chk-oral" onchange="toggleScoreCalcField('oral', this.checked)" class="accent-indigo-700 w-3.5 h-3.5 cursor-pointer">
+                    <span>17.口頭匯報成績(0-88)</span>
+                </label>
+                <button onclick="syncScoreCalcWithVisibleCols()" class="text-[11px] bg-blue-700 hover:bg-blue-800 text-white font-bold px-2 py-0.5 rounded shadow-2xs transition ml-1" title="只計算目前表格上有顯示出來的計分欄位">
+                    ⚡ 僅計算目前顯示欄位
+                </button>
+            </div>
+        </div>
+
+        <!-- 展開式：1-18欄個別隱藏/顯示勾選面板 -->
+        <div id="custom-col-drawer" class="hidden pt-2.5 border-t border-slate-200">
+            <div class="flex items-center justify-between mb-1.5">
+                <span class="text-xs font-black text-slate-700">📌 點擊下方按鈕可單獨切換第 1 至 18 欄的顯示狀態（亦可直接點擊表格表頭右上角的「✕」快速隱藏該欄）：</span>
+                <button onclick="applyViewPreset('all')" class="text-xs font-bold text-blue-700 hover:underline">全部恢復顯示</button>
+            </div>
+            <div id="col-toggles-container" class="flex flex-wrap gap-1.5">
+                <!-- 由 JS 生成 18 個欄位開關 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 操作小提示 -->
+    <div class="mb-3 bg-amber-50 border border-amber-300 px-3.5 py-2 rounded flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900 no-print">
+        <div class="flex items-center gap-2 font-bold">
+            <span class="bg-amber-600 text-white px-2 py-0.5 rounded">✨ 姓名貼上秘訣</span>
+            <span>直接在每組第 1 位學生的「組員姓名」格內按 <b>Ctrl+V / Cmd+V 貼上多行姓名</b>（或用頓號、逗號、空格分隔），系統會自動調整該組人數並放入各空格！</span>
+        </div>
+        <div class="font-bold text-indigo-800">
+            💡 點擊每個表頭右上角的「<span class="text-red-600">✕</span>」可隨時隱藏該欄；勾選表頭上的「計分」核取方塊即可即時改變「總分小計」！
+        </div>
+    </div>
+
+    <!-- 18欄主表格區 -->
+    <div class="sheet-container">
+        <table class="excel-table" id="main-record-table">
+            <thead>
+                <tr>
+                    <!-- 1 -->
+                    <th class="sticky-col-1 col-idx-1" style="min-width: 110px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <span>第1欄</span>
+                            <button onclick="toggleSingleColumn(1)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div>組別名稱</div>
+                        <div class="text-[11px] font-normal text-slate-700 mt-0.5">(組員1-4人)</div>
+                    </th>
+                    <!-- 2 -->
+                    <th class="sticky-col-2 col-idx-2" style="min-width: 185px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <span>第2欄</span>
+                            <button onclick="toggleSingleColumn(2)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div>組員姓名</div>
+                        <div class="text-[11px] txt-orange mt-0.5">支援直接貼上整組姓名</div>
+                    </th>
+                    <!-- 3 -->
+                    <th class="col-idx-3" style="min-width: 155px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <span>第3欄</span>
+                            <button onclick="toggleSingleColumn(3)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div class="txt-red">專題研習題目</div>
+                        <div class="text-[11px] font-normal text-slate-700 mt-0.5">(統一套用至各組)</div>
+                    </th>
+                    <!-- 4 -->
+                    <th class="col-idx-4" style="min-width: 150px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <span>第4欄</span>
+                            <button onclick="toggleSingleColumn(4)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div>參賽作品</div>
+                        <div class="text-[11px] font-normal text-slate-700 mt-0.5">(手動輸入產品/機構)</div>
+                    </th>
+                    <!-- 5 -->
+                    <th class="col-idx-5" style="min-width: 165px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <span>第5欄</span>
+                            <button onclick="toggleSingleColumn(5)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div>評審準則</div>
+                        <div class="text-[11px] font-normal text-slate-700 mt-0.5">(隨專題題目連動)</div>
+                    </th>
+                    <!-- 6 -->
+                    <th class="col-idx-6" style="min-width: 185px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <span>第6欄</span>
+                            <button onclick="toggleSingleColumn(6)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div>分論點</div>
+                        <div class="text-[11px] font-normal text-slate-700 mt-0.5">(分論點一至四手動輸入)</div>
+                    </th>
+                    <!-- 7 -->
+                    <th class="col-idx-7" style="min-width: 260px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <span>第7欄</span>
+                            <button onclick="toggleSingleColumn(7)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div class="txt-green">中心論點</div>
+                        <div class="text-[11px] font-normal text-slate-700 mt-0.5">(依作品、分論點、題目自動生成)</div>
+                    </th>
+                    <!-- 8 -->
+                    <th class="col-idx-8" style="min-width: 140px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <label class="inline-flex items-center gap-1 cursor-pointer font-bold text-blue-900" title="勾選是否納入總分小計">
+                                <input type="checkbox" id="th-chk-hw1" onchange="toggleScoreCalcField('hw1', this.checked)" class="accent-blue-700" checked>
+                                <span>第8欄(計分)</span>
+                            </label>
+                            <button onclick="toggleSingleColumn(8)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div>課堂作業一</div>
+                        <div class="text-[11px] font-bold text-slate-800">撰寫中心論點與分論點</div>
+                        <div class="text-[10px] text-slate-700">V(+3) / X(-3) / 補交(+2)</div>
+                        <div class="mt-1 flex justify-center gap-1 no-print">
+                            <button onclick="batchSetTask('hw1', 'V')" class="batch-btn" title="全部設為 V">全V</button>
+                            <button onclick="batchSetTask('hw1', 'X')" class="batch-btn" title="全部設為 X">全X</button>
+                            <button onclick="batchSetTask('hw1', '')" class="batch-btn" title="清空">清空</button>
+                        </div>
+                    </th>
+                    <!-- 9 -->
+                    <th class="col-idx-9" style="min-width: 140px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <label class="inline-flex items-center gap-1 cursor-pointer font-bold text-blue-900" title="勾選是否納入總分小計">
+                                <input type="checkbox" id="th-chk-hw2" onchange="toggleScoreCalcField('hw2', this.checked)" class="accent-blue-700" checked>
+                                <span>第9欄(計分)</span>
+                            </label>
+                            <button onclick="toggleSingleColumn(9)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div>課堂作業二</div>
+                        <div class="text-[11px] font-bold text-slate-800">撰寫論據與搜集資料方法</div>
+                        <div class="text-[10px] text-slate-700">V(+3) / X(-3) / 補交(+2)</div>
+                        <div class="mt-1 flex justify-center gap-1 no-print">
+                            <button onclick="batchSetTask('hw2', 'V')" class="batch-btn" title="全部設為 V">全V</button>
+                            <button onclick="batchSetTask('hw2', 'X')" class="batch-btn" title="全部設為 X">全X</button>
+                            <button onclick="batchSetTask('hw2', '')" class="batch-btn" title="清空">清空</button>
+                        </div>
+                    </th>
+                    <!-- 10 -->
+                    <th class="col-idx-10" style="min-width: 135px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <label class="inline-flex items-center gap-1 cursor-pointer font-bold text-blue-900" title="勾選是否納入總分小計">
+                                <input type="checkbox" id="th-chk-hw3" onchange="toggleScoreCalcField('hw3', this.checked)" class="accent-blue-700" checked>
+                                <span>第10欄(計分)</span>
+                            </label>
+                            <button onclick="toggleSingleColumn(10)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div>課堂作業三</div>
+                        <div class="text-[11px] font-bold text-slate-800">AI輔助搜集資料報告</div>
+                        <div class="text-[10px] text-slate-700">(0 - 4 分)</div>
+                        <div class="mt-1 no-print">
+                            <select onchange="batchSetTask('hw3', this.value); this.value='';" class="text-[11px] border border-black rounded px-1 py-0.5 bg-white font-bold">
+                                <option value="">批量給分...</option>
+                                <option value="4">全班填 4 分</option>
+                                <option value="3">全班填 3 分</option>
+                                <option value="2">全班填 2 分</option>
+                                <option value="1">全班填 1 分</option>
+                                <option value="0">全班填 0 分</option>
+                            </select>
+                        </div>
+                    </th>
+                    <!-- 11 -->
+                    <th class="col-idx-11" style="min-width: 135px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <label class="inline-flex items-center gap-1 cursor-pointer font-bold text-blue-900" title="勾選是否納入總分小計">
+                                <input type="checkbox" id="th-chk-ea1" onchange="toggleScoreCalcField('ea1', this.checked)" class="accent-blue-700" checked>
+                                <span>第11欄(計分)</span>
+                            </label>
+                            <button onclick="toggleSingleColumn(11)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div>小組初稿</div>
+                        <div class="text-[11px] font-bold text-slate-800">小組初稿 EA1</div>
+                        <div class="text-[10px] text-slate-700">(0 - 10 分)</div>
+                        <div class="mt-1 no-print">
+                            <select onchange="batchSetTask('ea1', this.value); this.value='';" class="text-[11px] border border-black rounded px-1 py-0.5 bg-white font-bold">
+                                <option value="">批量給分...</option>
+                                <option value="10">全班填 10 分</option>
+                                <option value="9">全班填 9 分</option>
+                                <option value="8">全班填 8 分</option>
+                                <option value="7">全班填 7 分</option>
+                                <option value="6">全班填 6 分</option>
+                                <option value="5">全班填 5 分</option>
+                                <option value="4">全班填 4 分</option>
+                                <option value="3">全班填 3 分</option>
+                                <option value="2">全班填 2 分</option>
+                                <option value="1">全班填 1 分</option>
+                                <option value="0">全班填 0 分</option>
+                            </select>
+                        </div>
+                    </th>
+                    <!-- 12 -->
+                    <th class="col-idx-12" style="min-width: 115px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <span>第12欄</span>
+                            <button onclick="toggleSingleColumn(12)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div class="text-blue-900">總分小計</div>
+                        <div id="subtotal-formula-hint" class="text-[10px] font-bold text-blue-800 mt-0.5">(計: 8, 9, 10, 11欄)</div>
+                    </th>
+                    <!-- 13 -->
+                    <th class="col-idx-13" style="min-width: 155px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <span>第13欄</span>
+                            <button onclick="toggleSingleColumn(13)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div class="txt-red">評核日期</div>
+                        <div class="text-[11px] txt-red">口頭匯報日期 EA</div>
+                        <div class="mt-1 no-print">
+                            <input type="date" onchange="batchSetDate(this.value)" class="text-[11px] border border-black rounded px-1 py-0.5 bg-white" title="統一設定全班評核日期">
+                        </div>
+                    </th>
+                    <!-- 14 -->
+                    <th class="col-idx-14" style="min-width: 115px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <span>第14欄</span>
+                            <button onclick="toggleSingleColumn(14)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div class="txt-red">評核時間</div>
+                        <div class="text-[11px] font-normal text-slate-700">(時間選擇)</div>
+                    </th>
+                    <!-- 15 -->
+                    <th class="col-idx-15" style="min-width: 85px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <span>第15欄</span>
+                            <button onclick="toggleSingleColumn(15)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div>評核順序</div>
+                        <div class="text-[10px] font-normal text-slate-700">(依日期時間排序)</div>
+                    </th>
+                    <!-- 16 -->
+                    <th class="col-idx-16" style="min-width: 105px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <span>第16欄</span>
+                            <button onclick="toggleSingleColumn(16)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div class="txt-red">評核地點</div>
+                        <div class="mt-1 no-print">
+                            <input type="text" placeholder="統一地點(如LW885)" onchange="batchSetVenue(this.value)" class="text-[11px] w-24 border border-black rounded px-1 py-0.5 bg-white text-center">
+                        </div>
+                    </th>
+                    <!-- 17 -->
+                    <th class="col-idx-17" style="min-width: 135px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <label class="inline-flex items-center gap-1 cursor-pointer font-bold text-indigo-900" title="勾選是否將口頭匯報分數納入第12欄總分小計">
+                                <input type="checkbox" id="th-chk-oral" onchange="toggleScoreCalcField('oral', this.checked)" class="accent-indigo-700">
+                                <span>第17欄(計分)</span>
+                            </label>
+                            <button onclick="toggleSingleColumn(17)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div>口頭匯報成績</div>
+                        <div class="text-[10px] font-normal text-slate-700">(等級與分數轉換)</div>
+                    </th>
+                    <!-- 18 -->
+                    <th class="col-idx-18" style="min-width: 390px;">
+                        <div class="flex justify-between items-center text-[11px] text-slate-700">
+                            <span>第18欄</span>
+                            <button onclick="toggleSingleColumn(18)" class="no-print text-slate-500 hover:text-red-600 font-bold px-1" title="隱藏此欄">✕</button>
+                        </div>
+                        <div>口頭匯報紀錄 (智能針對性評語庫)</div>
+                        <div class="text-[10px] font-normal text-slate-700">(自動跟隨學生「分論點」生成針對性評語 + 7大評分維度)</div>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="table-body">
+                <!-- 由 JavaScript 動態渲染 -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 底部說明 -->
+    <div class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-3 text-xs text-slate-700 no-print">
+        <div class="bg-white p-3 border border-slate-300 rounded">
+            <strong class="text-black">📌 檢視切換與隱藏欄位：</strong><br>
+            • 可一鍵切換<b>「全部 (1-18欄)」</b>、<b>「平時功課 (1-12欄)」</b>或<b>「口頭匯報 (1-7, 12-18欄)」</b>。<br>
+            • 點擊表頭右上角的 <code>✕</code> 或展開「⚙️ 自訂隱藏/顯示單一欄位」可自由開關任何一欄。
+        </div>
+        <div class="bg-white p-3 border border-slate-300 rounded">
+            <strong class="text-black">📌 根據選擇欄位計算分數 (第12欄)：</strong><br>
+            • 老師可自由勾選要納入「總分小計」的項目：<b>作業一(±3)</b>、<b>作業二(±3)</b>、<b>作業三(0-4)</b>、<b>小組初稿EA1(0-10)</b> 及 <b>口頭匯報成績(0-88)</b>。<br>
+            • 點擊「⚡ 僅計算目前顯示欄位」可自動同步為只加總畫面上顯示的計分欄。
+        </div>
+        <div class="bg-white p-3 border border-slate-300 rounded">
+            <strong class="text-black">📌 分論點針對性評語庫 (第18欄)：</strong><br>
+            系統即時分析學生填寫的「分論點」（如：<i>使用便利、人性化設計、安全保障、環保節能</i>等），自動在評語庫產生專屬於該分論點的深度評語與具體論據建議。
+        </div>
+    </div>
+
+    <!-- ==================== 彈出式視窗 1：口頭匯報評語庫與分層標籤 ==================== -->
+    <div id="comment-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-2 md:p-4 no-print">
+        <div class="bg-white border-2 border-black rounded-xl max-w-5xl w-full max-h-[93vh] flex flex-col shadow-2xl overflow-hidden">
+            <!-- Modal Header -->
+            <div class="bg-[#b4d3e3] border-b-2 border-black px-5 py-3.5 flex justify-between items-center">
+                <div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="bg-slate-900 text-white text-xs font-black px-2 py-0.5 rounded" id="modal-group-badge">第一組</span>
+                        <h3 class="text-lg font-black text-black" id="modal-student-title">學生姓名 - 口頭匯報評分準則與針對性評語庫</h3>
+                    </div>
+                    <p class="text-xs font-bold text-slate-800 mt-1" id="modal-context-info">
+                        題目：-- ｜ 參賽作品：-- ｜ 負責分論點：--
+                    </p>
+                </div>
+                <button onclick="closeCommentModal()" class="bg-white hover:bg-red-600 hover:text-white text-black border border-black font-black w-8 h-8 rounded-full flex items-center justify-center text-base transition">✕</button>
+            </div>
+
+            <!-- 快速套用範本列 -->
+            <div class="bg-slate-100 border-b border-slate-300 px-5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="font-black text-slate-700">⚡ 依表現一鍵配對（自動結合分論點）：</span>
+                    <button onclick="applySmartPreset('A')" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-2.5 py-1 rounded shadow-2xs transition">🌟 優異範本 (A級)</button>
+                    <button onclick="applySmartPreset('B')" class="bg-blue-700 hover:bg-blue-800 text-white font-bold px-2.5 py-1 rounded shadow-2xs transition">👍 良好範本 (B級)</button>
+                    <button onclick="applySmartPreset('C')" class="bg-amber-600 hover:bg-amber-700 text-white font-bold px-2.5 py-1 rounded shadow-2xs transition">👌 一般範本 (C級)</button>
+                    <button onclick="applySmartPreset('D')" class="bg-rose-700 hover:bg-rose-800 text-white font-bold px-2.5 py-1 rounded shadow-2xs transition">⚠️ 待改善範本 (D/F級)</button>
+                </div>
+                <button onclick="clearCurrentModalComments()" class="text-red-700 hover:underline font-bold">🗑️ 清空本生評語</button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="p-5 overflow-y-auto space-y-5 flex-1 bg-slate-50" id="modal-categories-container">
+                <!-- 動態生成：分論點專屬針對性評語 + 題目推測評語 + 7大評分維度 -->
+            </div>
+
+            <!-- 即時預覽與手動修訂區 -->
+            <div class="bg-white border-t-2 border-black p-4">
+                <div class="flex justify-between items-center mb-1.5">
+                    <label class="text-xs font-black text-slate-800">✍️ 匯報紀錄最終內容（點選上方標籤會自動加入，老師亦可直接在此修改）：</label>
+                    <span class="text-[11px] text-slate-500">提示：再次點擊已選標籤可取消該句評語</span>
+                </div>
+                <textarea id="modal-comment-textarea" rows="3" oninput="handleModalTextareaInput(this.value)" class="w-full border-2 border-slate-400 rounded-lg p-2.5 text-sm font-medium text-slate-900 focus:border-blue-600 focus:outline-none" placeholder="請點選上方評語標籤，或直接輸入評語..."></textarea>
+                <div class="mt-3 flex justify-between items-center">
+                    <button onclick="copyGroupCooperationToAll()" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-300 font-bold px-3 py-1.5 rounded transition">
+                        🤝 將「組員合作互動」評語同步套用至同組所有組員
+                    </button>
+                    <div class="flex gap-2">
+                        <button onclick="closeCommentModal()" class="bg-slate-900 hover:bg-black text-white font-black text-sm px-6 py-2 rounded-lg shadow transition">
+                            ✅ 完成並返回表格
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 彈出式視窗 2：批量貼上組員姓名 (單組或全班) ==================== -->
+    <div id="paste-roster-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-3 no-print">
+        <div class="bg-white border-2 border-black rounded-xl max-w-2xl w-full shadow-2xl overflow-hidden">
+            <div class="bg-[#b4d3e3] border-b-2 border-black px-5 py-3 flex justify-between items-center">
+                <h3 class="text-base font-black text-black" id="paste-modal-title">📋 批量貼上組員姓名</h3>
+                <button onclick="closePasteRosterModal()" class="bg-white hover:bg-red-600 hover:text-white text-black border border-black font-black w-7 h-7 rounded-full flex items-center justify-center text-sm">✕</button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div id="paste-modal-mode-desc" class="text-xs bg-blue-50 border border-blue-200 text-blue-900 p-3 rounded leading-relaxed font-medium">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-slate-700 mb-1.5">請在下方貼上學生姓名（亦可連同括號內的分論點一併貼上，如：<code>謝理基(功能全面)</code>）：</label>
+                    <textarea id="paste-roster-textarea" rows="8" class="w-full border-2 border-slate-300 rounded-lg p-3 text-sm font-medium focus:border-blue-600 focus:outline-none" placeholder="範例一（一行一位學生）：&#10;謝理基&#10;梁經緯&#10;常栢榮&#10;&#10;範例二（用空格、頓號或逗號分隔）：&#10;謝理基、梁經緯、常栢榮&#10;&#10;範例三（連同分論點）：&#10;謝理基(功能全面)&#10;梁經緯(使用便利)"></textarea>
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button onclick="closePasteRosterModal()" class="px-4 py-2 rounded border border-slate-400 text-xs font-bold text-slate-700 hover:bg-slate-100">取消</button>
+                    <button onclick="confirmPasteRoster()" class="px-5 py-2 rounded bg-blue-700 hover:bg-blue-800 text-white text-xs font-black shadow">⚡ 立即填入表格</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 18 個欄位名稱定義
+        const columnDefinitions = [
+            { idx: 1, name: '組別名稱' },
+            { idx: 2, name: '組員姓名' },
+            { idx: 3, name: '專題研習題目' },
+            { idx: 4, name: '參賽作品' },
+            { idx: 5, name: '評審準則' },
+            { idx: 6, name: '分論點' },
+            { idx: 7, name: '中心論點' },
+            { idx: 8, name: '課堂作業一' },
+            { idx: 9, name: '課堂作業二' },
+            { idx: 10, name: '課堂作業三(AI)' },
+            { idx: 11, name: '小組初稿EA1' },
+            { idx: 12, name: '總分小計' },
+            { idx: 13, name: '評核日期EA' },
+            { idx: 14, name: '評核時間' },
+            { idx: 15, name: '評核順序' },
+            { idx: 16, name: '評核地點' },
+            { idx: 17, name: '口頭匯報成績' },
+            { idx: 18, name: '口頭匯報紀錄' }
+        ];
+
+        // 1. 附件 index.html 的 19 個專題研習題目與評審準則
+        const topicsList = [
+            { id: 't1', title: '香港名牌選舉', opts: ['知名度', '經營特色', '創新意念', '品質形象', '環保及社會責任', '其他'] },
+            { id: 't2', title: '最佳幼稚園', opts: ['照顧不同的學習需要', '有效的語文學與教', '運用資訊科技促進學習', '培養學生的正面價值觀和態度', '創意藝術或文化教育', '提倡健康的生活方式'] },
+            { id: 't3', title: '社區投資共享基金', opts: ['社會網絡的建立', '凝聚社區力量', '互助和互惠', '社會凝聚和包容', '社會參與/公共事務的參與', '資訊和溝通'] },
+            { id: 't4', title: '香港設計大獎', opts: ['市場需求', '作品特色', '創新性', '成效', '正面影響', '其他'] },
+            { id: 't5', title: '最佳旅遊景點', opts: ['自然景觀', '歷史/文化價值', '美食', '購物', '消閒遊樂', '相關配套', '其他'] },
+            { id: 't6', title: '最佳餐廳', opts: ['食物質量', '烹調技巧', '環境', '服務', '其他'] },
+            { id: 't7', title: '最佳商務宣傳推廣場地', opts: ['場地設計', '設施及配套', '服務', '其他'] },
+            { id: 't8', title: '最佳康樂文化設施', opts: ['場地設計', '服務', '配套設施', '環保元素', '其他'] },
+            { id: 't9', title: '社區體育會計劃', opts: ['提升目標對象的個人特質', '所屬地區的場地能配合該項活動', '計劃全面及切實可行'] },
+            { id: 't10', title: '最佳度假酒店', opts: ['客房佈置及設備', '員工態度及服務', '康樂設施及配套', '酒店環境', '其他'] },
+            { id: 't11', title: '優質建築大獎 (建築規劃及設計)', opts: ['建築用地規劃', '美學、實用、創意設計', '室內視覺規劃', '科技和創新應用', '化解挑戰及限制', '其他'] },
+            { id: 't12', title: '優質建築大獎 (環保及可持續發展)', opts: ['能源效益', '減廢', '室內環境質量', '綠化效益', '其他'] },
+            { id: 't13', title: '優質建築大獎 (智慧建築)', opts: ['建築規劃', '科技和創新應用', '安全、健康', '便利、舒適', '節能、資源整合及運用', '其他'] },
+            { id: 't14', title: '優質建築大獎 (人性化建築)', opts: ['關愛設計(通達、便利、安全)', '保育', '社會效益', '空間設計/運用', '其他'] },
+            { id: 't15', title: '香港工商業獎 (工業產品)', opts: ['創新(如應用新技術)', '性能', '方便使用', '安全程度', '對環境之影響', '其他'] },
+            { id: 't16', title: '香港健康生活產業大奬', opts: ['市場表現', '社會價值', '功能/功效(與健康相關)', '創新', '可持續發展', '其他'] },
+            { id: 't17', title: '最佳綠色生活空間', opts: ['[環保成效] 節能', '[環保成效] 廢物管理', '[環保成效] 改善環境質素', '[環保成效] 減少污染', '[環保成效] 可持續發展', '環保設計', '其他'] },
+            { id: 't18', title: '有「營」食譜設計比賽', opts: ['營養價值', '賣相、口感及味道', '創意', '烹調方式或技巧', '其他'] },
+            { id: 't19', title: '香港資訊及通訊科技獎', opts: ['創意', '功能', '市場潛力或公眾接受程度', '使用者可獲得的好處/影響', '質量', '其他'] }
+        ];
+
+        // 口頭匯報成績等級對照表
+        const oralGrades = [
+            { label: '請選擇...', grade: '', score: '' },
+            { label: 'A1 (88分)', grade: 'A1', score: 88 },
+            { label: 'A2 (73分)', grade: 'A2', score: 73 },
+            { label: 'B1 (69分)', grade: 'B1', score: 69 },
+            { label: 'B2 (65分)', grade: 'B2', score: 65 },
+            { label: 'B3 (62分)', grade: 'B3', score: 62 },
+            { label: 'C1 (59分)', grade: 'C1', score: 59 },
+            { label: 'C2 (55分)', grade: 'C2', score: 55 },
+            { label: 'C3 (52分)', grade: 'C3', score: 52 },
+            { label: 'D1 (48分)', grade: 'D1', score: 48 },
+            { label: 'D2 (43分)', grade: 'D2', score: 43 },
+            { label: 'F1 (35分)', grade: 'F1', score: 35 },
+            { label: 'F2 (20分)', grade: 'F2', score: 20 },
+            { label: 'U (0分)', grade: 'U', score: 0 }
+        ];
+
+        const cnNums = ['一', '二', '三', '四'];
+
+        // 7大基本評分準則分層標籤庫
+        const baseRubricCategories = [
+            {
+                id: 'evidence_sufficiency',
+                title: '1. 論據充分程度（分層評量）',
+                badgeColor: 'bg-blue-100 text-blue-900 border-blue-300',
+                levels: [
+                    { level: '層次一：極為充分', tag: '論據極為充分', text: '論據極為充分，能緊扣分論點提出詳實具體的例證與客觀數據，論證過程嚴密扎實。' },
+                    { level: '層次二：尚算充分', tag: '論據尚算充分', text: '論據尚算充分，能提供基本例子與資料支持分論點，惟部分細節數據可進一步深化。' },
+                    { level: '層次三：略顯單薄', tag: '論據略顯單薄', text: '論據略顯單薄，多以概括性描述為主，較少具體數據或實例支撐，宜補充客觀佐證。' },
+                    { level: '層次四：明顯不足', tag: '論據明顯不足', text: '論據明顯不足，未能提出有效例證支持分論點，論述流於空泛表面。' }
+                ]
+            },
+            {
+                id: 'evidence_diversity',
+                title: '2. 論據多元化程度（資料來源廣度）',
+                badgeColor: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+                levels: [
+                    { level: '層次一：高度多元', tag: '論據高度多元', text: '論據來源高度多元化，能綜合運用一手問卷調查、官方統計數據、專家評論及同業橫向對比，多角度印證論點。' },
+                    { level: '層次二：尚算多元', tag: '論據尚算多元', text: '論據種類尚算多元，能結合文字案例與基本數據資料進行分析，資料搜集具一定廣度。' },
+                    { level: '層次三：來源單一', tag: '論據來源較單一', text: '論據來源較為單一，過度依賴官方網頁或單一宣傳資料，宜加入第三方客觀評價或用家調查。' },
+                    { level: '層次四：欠缺實證', tag: '欠缺客觀實證', text: '論據欠缺客觀實證，多為主觀臆測或個人感受，未見多元資料搜集成果。' }
+                ]
+            },
+            {
+                id: 'persuasiveness',
+                title: '3. 論證說服力（高至一般／薄弱）',
+                badgeColor: 'bg-purple-100 text-purple-900 border-purple-300',
+                levels: [
+                    { level: '說服力極高', tag: '說服力極高', text: '論證邏輯環環相扣，能精準回應評審準則，成功凸顯參賽作品的核心優勢，整體說服力極高。' },
+                    { level: '說服力良好', tag: '說服力良好', text: '論點與論據配合得宜，因果推論合理清晰，能有效說服聽眾認同其分論點，說服力良好。' },
+                    { level: '說服力一般', tag: '說服力一般', text: '論據與分論點之間的銜接偶有斷層，對作品優勢的剖析未夠深入，整體說服力一般。' },
+                    { level: '說服力薄弱', tag: '說服力薄弱', text: '論證偏離所選評審準則，未能說明作品為何值得獲獎，邏輯推演鬆散，說服力薄弱。' }
+                ]
+            },
+            {
+                id: 'putonghua',
+                title: '4. 普通話口語表達情況',
+                badgeColor: 'bg-amber-100 text-amber-900 border-amber-300',
+                levels: [
+                    { level: '標準流利', tag: '普通話標準流利', text: '普通話語音標準自然，平翹舌音、前後鼻音及四聲聲調準確，語流順暢，用詞規範得體。' },
+                    { level: '清晰順暢', tag: '普通話清晰順暢', text: '普通話表達清晰順暢，雖偶有個別字詞聲調或語音小瑕疵，但絲毫不影響整體傳意效果。' },
+                    { level: '方言影響', tag: '受粵語方言影響', text: '普通話表達尚可，惟部分字詞受粵語方言發音及港式詞彙影響較明顯，語速偶有急促或停頓。' },
+                    { level: '生硬斷續', tag: '發音生硬斷續', text: '普通話發音較為生硬，聲調及平翹舌偏誤較多，語句斷續不連貫，需加強普通話朗讀與口語訓練。' }
+                ]
+            },
+            {
+                id: 'presentation_skills',
+                title: '5. 匯報技巧與結構組織',
+                badgeColor: 'bg-sky-100 text-sky-900 border-sky-300',
+                levels: [
+                    { level: '技巧純熟出色', tag: '匯報技巧純熟', text: '匯報結構層次分明，善用過渡語承上啟下，語氣抑揚頓挫，能緊密配合簡報圖表作重點解說，時間掌握精準。' },
+                    { level: '結構完整穩健', tag: '匯報結構完整', text: '匯報條理清晰，能按部就班闡述分論點與論據，簡報配合恰當，整體匯報節奏穩健。' },
+                    { level: '技巧中規中矩', tag: '匯報技巧一般', text: '匯報結構尚算完整，惟語調較為平淡單調，多為順序宣讀簡報文字，重點提煉與時間控制宜加強。' },
+                    { level: '結構及時間失衡', tag: '結構鬆散/超時', text: '匯報組織較為混亂，重點不清，未能有效運用簡報輔助解說，且時間掌握失準。' }
+                ]
+            },
+            {
+                id: 'body_eye_contact',
+                title: '6. 身體語言及眼神交流',
+                badgeColor: 'bg-rose-100 text-rose-900 border-rose-300',
+                levels: [
+                    { level: '自信大方極佳', tag: '眼神交流極佳', text: '儀態自信大方，全程與聽眾及評審保持良好眼神接觸，手勢自然得體，展現極佳的演講台風。' },
+                    { level: '台風穩健自然', tag: '有眼神接觸', text: '台風穩健，大部分時間能望向聽眾進行交流，站姿端正，偶爾參考提示卡但不影響互動。' },
+                    { level: '略顯緊張唸稿', tag: '眼神交流偏少', text: '表現略顯緊張，視線較多停留在簡報螢幕或講稿上，與台下眼神交流偏少，肢體動作較拘謹。' },
+                    { level: '全程低頭讀稿', tag: '全程低頭讀稿', text: '全程低頭宣讀講稿或背對聽眾看螢幕，缺乏眼神接觸與身體語言，宜脫稿演練以建立自信。' }
+                ]
+            },
+            {
+                id: 'team_cooperation',
+                title: '7. 組員合作與互動表現',
+                badgeColor: 'bg-indigo-100 text-indigo-900 border-indigo-300',
+                levels: [
+                    { level: '默契十足', tag: '組員默契十足', text: '組員之間分工清晰均衡，交接過渡自然流暢，能互相呼應並共同緊扣中心論點，展現極佳團隊精神。' },
+                    { level: '合作良好', tag: '組員合作良好', text: '組員分工明確，各司其職完成負責的分論點，轉場銜接順暢，整體團隊合作表現良好。' },
+                    { level: '各自表述', tag: '各自表述連貫不足', text: '組員雖有分工，但各分論點之間較為獨立割裂，轉場略顯生硬，整體報告的連貫性有待提升。' },
+                    { level: '欠缺協調', tag: '組員欠缺協調', text: '組員之間欠缺協調與默契，內容偶有重疊或銜接中斷，匯報時長分配不均，宜加強賽前合練。' }
+                ]
+            }
+        ];
+
+        // 2. 根據學生「分論點」及「評審準則」深度解析並生成針對性評語庫
+        function getSubPointSpecificComments(topicTitle, productName, criteria, subPoint) {
+            const p = (productName || '參賽作品').trim();
+            const sp = (subPoint || criteria || '本分論點').trim();
+            const c = (criteria || '評審準則').trim();
+            const combined = `${sp} ${c}`;
+
+            let dimensionName = '核心分論點深度剖析';
+            let specificItems = [];
+
+            if (/方便|便利|操作|易用|簡易|上手/.test(combined)) {
+                dimensionName = `針對分論點「${sp}」（使用便利與操作體驗）`;
+                specificItems = [
+                    {
+                        level: '分論點優異',
+                        tag: `突顯「${sp}」操作優勢`,
+                        text: `能緊扣分論點「${sp}」，具體展示【${p}】簡化操作步驟、直覺化介面及省時省力的設計細節，並引用真實用家體驗數據佐證其便利性。`
+                    },
+                    {
+                        level: '分論點良好',
+                        tag: `清楚說明「${sp}」特點`,
+                        text: `能圍繞分論點「${sp}」列舉【${p}】方便日常使用的具體功能，惟若能加入與傳統操作耗時的量化對比，論證會更具說服力。`
+                    },
+                    {
+                        level: '分論點待深化',
+                        tag: `「${sp}」宜補實測對比`,
+                        text: `雖以「${sp}」為分論點，但多停留於表面描述「容易使用」，建議補充不同年齡層用家的實際操作反饋或具體步驟拆解。`
+                    }
+                ];
+            } else if (/人性化|關愛|貼心|體貼|舒適|無障礙|通達/.test(combined)) {
+                dimensionName = `針對分論點「${sp}」（以人為本與人性化設計）`;
+                specificItems = [
+                    {
+                        level: '分論點優異',
+                        tag: `深具「${sp}」同理心論證`,
+                        text: `能緊扣分論點「${sp}」，從人體工學及不同使用者（如長者、初學者或家庭用戶）的痛點出發，細緻剖析【${p}】貼心周到的設計巧思。`
+                    },
+                    {
+                        level: '分論點良好',
+                        tag: `能點出「${sp}」貼心細節`,
+                        text: `能針對分論點「${sp}」舉出【${p}】照顧用家感受的設計細節，若能補充用家滿意度問卷數據，更能強化以人為本的論點。`
+                    },
+                    {
+                        level: '分論點待深化',
+                        tag: `「${sp}」宜強化用家視角`,
+                        text: `在闡述分論點「${sp}」時偏重羅列硬體規格，較少分析這些設計如何切實解決用家的日常不便，宜加強「人性化關懷」的論證。`
+                    }
+                ];
+            } else if (/安全|私隱|保障|防護|穩固|可靠|健康/.test(combined)) {
+                dimensionName = `針對分論點「${sp}」（安全保障與私隱防護）`;
+                specificItems = [
+                    {
+                        level: '分論點優異',
+                        tag: `「${sp}」認證與防護嚴密`,
+                        text: `緊扣分論點「${sp}」，詳列【${p}】的安全防護機制、國際安全標準認證或私隱加密技術，並以權威測試報告證明其高度可靠性。`
+                    },
+                    {
+                        level: '分論點良好',
+                        tag: `能說明「${sp}」保障措施`,
+                        text: `能圍繞分論點「${sp}」說明【${p}】如何降低使用風險並保障用戶權益，若能補充具體安全認證標章或零事故數據會更完滿。`
+                    },
+                    {
+                        level: '分論點待深化',
+                        tag: `「${sp}」欠缺客觀安全標準`,
+                        text: `論述分論點「${sp}」時僅口頭強調產品十分安全，欠缺具體的防護原理、安全認證或實測數據支持，說服力有待提升。`
+                    }
+                ];
+            } else if (/功能全面|多元化|多用途|性能|功效|質量|品質|耐用|準確/.test(combined)) {
+                dimensionName = `針對分論點「${sp}」（功能全面與卓越性能）`;
+                specificItems = [
+                    {
+                        level: '分論點優異',
+                        tag: `「${sp}」規格與實測兼備`,
+                        text: `能緊扣分論點「${sp}」，有條理地拆解【${p}】的多元功能模組與核心性能指標，並透過同類產品橫向規格對比，力證其卓越表現。`
+                    },
+                    {
+                        level: '分論點良好',
+                        tag: `「${sp}」功能介紹清晰`,
+                        text: `能清晰介紹【${p}】在「${sp}」方面的各項實用功能與品質表現，惟部分技術優勢可轉化為更易懂的用家實際得益。`
+                    },
+                    {
+                        level: '分論點待深化',
+                        tag: `「${sp}」流於功能清單羅列`,
+                        text: `在匯報分論點「${sp}」時較像宣讀產品說明書的功能清單，缺乏深入分析各項功能如何協同發揮優勢，亦欠缺性能測試數據。`
+                    }
+                ];
+            } else if (/可持續|環保|節能|減廢|綠化|生態|低碳|污染/.test(combined)) {
+                dimensionName = `針對分論點「${sp}」（環保效益與可持續發展）`;
+                specificItems = [
+                    {
+                        level: '分論點優異',
+                        tag: `「${sp}」量化減碳數據有力`,
+                        text: `緊扣分論點「${sp}」，引用具體的節能減排百分比、環保物料比例或能源標籤數據，有力論證【${p}】對推動可持續發展的實質貢獻。`
+                    },
+                    {
+                        level: '分論點良好',
+                        tag: `能闡述「${sp}」綠色措施`,
+                        text: `能針對分論點「${sp}」說明【${p}】採用的環保設計與減廢理念，若能補充具體的環境效益量化數據，論證將更扎實。`
+                    },
+                    {
+                        level: '分論點待深化',
+                        tag: `「${sp}」環保論據流於口號`,
+                        text: `闡述分論點「${sp}」時多用「愛護地球、十分環保」等泛論，未有提供【${p}】在生產或使用過程中的具體減碳或節能實證。`
+                    }
+                ];
+            } else if (/創新|創意|科技|新穎|突破|智能|AI/.test(combined)) {
+                dimensionName = `針對分論點「${sp}」（設計創新與技術突破）`;
+                specificItems = [
+                    {
+                        level: '分論點優異',
+                        tag: `「${sp}」突破傳統痛點鮮明`,
+                        text: `緊扣分論點「${sp}」，清晰對比傳統做法的局限與【${p}】的創新突破點，具體說明新技術或新設計如何開創業界先河。`
+                    },
+                    {
+                        level: '分論點良好',
+                        tag: `能點出「${sp}」新穎元素`,
+                        text: `能圍繞分論點「${sp}」介紹【${p}】的新穎設計概念與技術亮點，若能進一步強化「與舊有產品的差異對比」會更突出。`
+                    },
+                    {
+                        level: '分論點待深化',
+                        tag: `「${sp}」創新點交代未夠清晰`,
+                        text: `雖以「${sp}」為分論點，但所述特點與市面上一般同類產品差異不大，未能充分凸顯【${p}】的獨創性與革新聞名之處。`
+                    }
+                ];
+            } else if (/市場|知名度|口碑|性價比|價格|受歡迎|需求/.test(combined)) {
+                dimensionName = `針對分論點「${sp}」（市場競爭力與大眾口碑）`;
+                specificItems = [
+                    {
+                        level: '分論點優異',
+                        tag: `「${sp}」市佔與問卷數據翔實`,
+                        text: `緊扣分論點「${sp}」，有效運用銷售數據、市場佔有率及一手街頭/網上問卷結果，客觀印證【${p}】深受大眾歡迎與市場肯定。`
+                    },
+                    {
+                        level: '分論點良好',
+                        tag: `能反映「${sp}」正面口碑`,
+                        text: `能針對分論點「${sp}」引述消費者評價及品牌知名度表現，若能補充具體的市場定價或同業競爭力對比會更全面。`
+                    },
+                    {
+                        level: '分論點待深化',
+                        tag: `「${sp}」欠缺客觀市場數據`,
+                        text: `在論證分論點「${sp}」時多憑主觀印象指產品「好多人用」，欠缺實際調查數據、銷量或第三方評分支持。`
+                    }
+                ];
+            } else {
+                dimensionName = `針對分論點「${sp}」（結合評審準則：${c}）`;
+                specificItems = [
+                    {
+                        level: '分論點優異',
+                        tag: `緊扣「${sp}」論證深入`,
+                        text: `能緊密圍繞個人負責的分論點「${sp}」展開剖析，精準呼應評審準則「${c}」，以具體實例及數據充分證明【${p}】表現卓越。`
+                    },
+                    {
+                        level: '分論點良好',
+                        tag: `能扣連「${sp}」舉例說明`,
+                        text: `能按照分論點「${sp}」組織匯報內容，舉出【${p}】的相關特點作支持，整體論述符合「${c}」的要求。`
+                    },
+                    {
+                        level: '分論點待深化',
+                        tag: `「${sp}」針對性與深度不足`,
+                        text: `匯報內容對分論點「${sp}」的聚焦度不足，部分論述與其他組員重疊，宜針對「${sp}」補充更具代表性的專屬論據。`
+                    }
+                ];
+            }
+
+            return {
+                dimensionName,
+                specificItems
+            };
+        }
+
+        // 3. 根據「專題研習題目」推測的題目情境評語
+        function getTopicContextualComments(topicTitle, productName, criteria, subPoint) {
+            const p = (productName || '參賽作品').trim();
+            const c = (criteria || '評審準則').trim();
+            const sp = (subPoint || c || '分論點').trim();
+            const t = (topicTitle || '專題獎項').trim();
+
+            if (/工商業獎|資訊及通訊科技|設計大獎|名牌|健康生活/.test(t)) {
+                return [
+                    { tag: '專題情境：業界橫向對比佳', text: `能結合《${t}》的評選定位，將【${p}】與市面上同類產品進行橫向規格與成效對比，凸顯其在「${sp}」上的領先優勢。` },
+                    { tag: '專題情境：用家痛點分析準', text: `從實際用家痛點出發，具體展示【${p}】如何透過「${sp}」解決日常使用難題，完美契合《${t}》對「${c}」的要求。` }
+                ];
+            } else if (/建築|綠色生活|康樂文化|商務宣傳/.test(t)) {
+                return [
+                    { tag: '專題情境：空間與環境實證佳', text: `能結合實地考察照片與空間規劃分析，具體呈現【${p}】在「${sp}」上的匠心設計，呼應《${t}》的評審要求。` },
+                    { tag: '專題情境：使用者體驗具體', text: `能從參觀者或用家角度切入，說明【${p}】在「${sp}」方面如何提升公眾體驗與環境效益。` }
+                ];
+            } else if (/餐廳|食譜|旅遊景點|度假酒店/.test(t)) {
+                return [
+                    { tag: '專題情境：感官與口碑數據兼備', text: `能綜合食客/旅客網上評分、一手問卷及實地體驗，生動論證【${p}】在「${sp}」方面的吸引力，符合《${t}》標準。` },
+                    { tag: '專題情境：特色細節描繪生動', text: `對【${p}】在「${sp}」上的品質細節與服務特色描繪具體，成功營造具吸引力的匯報畫面感。` }
+                ];
+            } else {
+                return [
+                    { tag: '專題情境：社會與對象成效顯著', text: `能緊扣《${t}》的核心精神，以受眾回饋及具體活動成果，論證【${p}】在「${sp}」上帶來的正面價值。` },
+                    { tag: '專題情境：切合實際需要', text: `能從目標群體的切身需要出發，具體說明【${p}】在「${sp}」方面的可行性與深遠影響。` }
+                ];
+            }
+        }
+
+        // 4. 預設範例資料
+        const defaultGroupsData = () => [
+            {
+                id: 'g1',
+                groupName: '第一組',
+                topicId: 't15',
+                product: '3D打印機',
+                members: [
+                    { name: '謝理基', criteria: '性能', subPoint: '功能全面', hw1: 'V', hw2: 'V', hw3: '4', ea1: '8', evalDate: '2026-06-13', evalTime: '10:45', venue: 'LW885', oralGrade: 'A2', oralNote: '能緊扣分論點「功能全面」，有條理地拆解【3D打印機】的多元功能模組與核心性能指標，並透過同類產品橫向規格對比，力證其卓越表現。 論據極為充分，能緊扣分論點提出詳實具體的例證與客觀數據，論證過程嚴密扎實。 普通話表達清晰順暢，雖偶有個別字詞聲調或語音小瑕疵，但絲毫不影響整體傳意效果。' },
+                    { name: '梁經緯', criteria: '方便使用', subPoint: '使用便利', hw1: 'V', hw2: 'V', hw3: '3', ea1: '8', evalDate: '2026-06-13', evalTime: '10:45', venue: 'LW885', oralGrade: 'B1', oralNote: '能圍繞分論點「使用便利」列舉【3D打印機】方便日常使用的具體功能，惟若能加入與傳統操作耗時的量化對比，論證會更具說服力。 論點與論據配合得宜，因果推論合理清晰，能有效說服聽眾認同其分論點，說服力良好。 台風穩健，大部分時間能望向聽眾進行交流，站姿端正，偶爾參考提示卡但不影響互動。' },
+                    { name: '常栢榮', criteria: '對環境之影響', subPoint: '有助可持續發展', hw1: 'V', hw2: '補交', hw3: '3', ea1: '8', evalDate: '2026-06-13', evalTime: '10:45', venue: 'LW885', oralGrade: 'B2', oralNote: '能針對分論點「有助可持續發展」說明【3D打印機】採用的環保設計與減廢理念，若能補充具體的環境效益量化數據，論證將更扎實。 組員分工明確，各司其職完成負責的分論點，轉場銜接順暢，整體團隊合作表現良好。' }
+                ]
+            },
+            {
+                id: 'g2',
+                groupName: '第二組',
+                topicId: 't15',
+                product: 'Solidwork繪圖電腦軟件',
+                members: [
+                    { name: '梁延晋', criteria: '對環境之影響', subPoint: '有利可持續發展', hw1: 'V', hw2: 'V', hw3: '4', ea1: '9', evalDate: '2026-06-13', evalTime: '11:15', venue: 'LW885', oralGrade: 'A1', oralNote: '緊扣分論點「有利可持續發展」，引用具體的節能減排百分比、環保物料比例或能源標籤數據，有力論證【Solidwork繪圖電腦軟件】對推動可持續發展的實質貢獻。 普通話語音標準自然，平翹舌音、前後鼻音及四聲聲調準確，語流順暢，用詞規範得體。' },
+                    { name: '李傲玥', criteria: '性能', subPoint: '性能全面-多元化功能', hw1: 'V', hw2: 'V', hw3: '4', ea1: '9', evalDate: '2026-06-13', evalTime: '11:15', venue: 'LW885', oralGrade: 'A2', oralNote: '' },
+                    { name: '張家鳴', criteria: '方便使用', subPoint: '方便使用-人性化設計', hw1: 'V', hw2: 'V', hw3: '4', ea1: '9', evalDate: '2026-06-13', evalTime: '11:15', venue: 'LW885', oralGrade: 'B1', oralNote: '' }
+                ]
+            },
+            {
+                id: 'g3',
+                groupName: '第三組',
+                topicId: 't15',
+                product: 'I-Phone 11代手機',
+                members: [
+                    { name: '區健朗', criteria: '方便使用', subPoint: '方便使用', hw1: 'V', hw2: 'V', hw3: '3', ea1: '7', evalDate: '2026-06-13', evalTime: '11:45', venue: 'LW885', oralGrade: 'B2', oralNote: '' },
+                    { name: '黃偉cong', criteria: '性能', subPoint: '性能卓越', hw1: 'V', hw2: 'X', hw3: '3', ea1: '7', evalDate: '2026-06-13', evalTime: '11:45', venue: 'LW885', oralGrade: 'B3', oralNote: '' },
+                    { name: '黃震鏗', criteria: '安全程度', subPoint: '致力關注用戶私隱安全', hw1: 'V', hw2: 'V', hw3: '3', ea1: '7', evalDate: '2026-06-13', evalTime: '11:45', venue: 'LW885', oralGrade: 'B2', oralNote: '' }
+                ]
+            },
+            {
+                id: 'g4',
+                groupName: '第四組',
+                topicId: 't15',
+                product: '空氣炸鍋',
+                members: [
+                    { name: '洪家哲', criteria: '安全程度', subPoint: '有效保障使用者安全', hw1: 'V', hw2: 'V', hw3: '4', ea1: '8', evalDate: '2026-06-13', evalTime: '12:15', venue: 'LW885', oralGrade: 'B1', oralNote: '' },
+                    { name: '張凱倫', criteria: '創新(如應用新技術)', subPoint: '設計創新', hw1: 'V', hw2: 'V', hw3: '4', ea1: '8', evalDate: '2026-06-13', evalTime: '12:15', venue: 'LW885', oralGrade: 'B2', oralNote: '' },
+                    { name: '林琨佑', criteria: '方便使用', subPoint: '操作方便', hw1: 'V', hw2: '補交', hw3: '3', ea1: '8', evalDate: '2026-06-13', evalTime: '12:15', venue: 'LW885', oralGrade: 'C1', oralNote: '' },
+                    { name: '杜子軒', criteria: '性能', subPoint: '性能卓越', hw1: 'V', hw2: 'V', hw3: '3', ea1: '8', evalDate: '2026-06-13', evalTime: '12:15', venue: 'LW885', oralGrade: 'B3', oralNote: '' }
+                ]
+            }
+        ];
+
+        const STORAGE_KEY = 'pbl_progress_record_v4';
+        let appData = {
+            globalTopicId: 't15',
+            viewPreset: 'all', // 'all' | 'hw' | 'oral' | 'custom'
+            hiddenCols: [],    // 儲存被隱藏的欄位編號 (1-18)
+            scoreCalcFields: { // 儲存納入第12欄「總分小計」的計分欄位
+                hw1: true,
+                hw2: true,
+                hw3: true,
+                ea1: true,
+                oral: false
+            },
+            groups: []
+        };
+
+        let activeModalTarget = { gIdx: null, mIdx: null };
+        let activePasteGroupIdx = null;
+
+        // 初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            initGlobalTopicSelect();
+            loadState();
+            syncUIFromState();
+            renderTable();
+        });
+
+        function initGlobalTopicSelect() {
+            const sel = document.getElementById('global-topic-select');
+            sel.innerHTML = topicsList.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
+        }
+
+        function loadState() {
+            const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('pbl_progress_record_v3');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    appData.globalTopicId = parsed.globalTopicId || 't15';
+                    appData.viewPreset = parsed.viewPreset || 'all';
+                    appData.hiddenCols = Array.isArray(parsed.hiddenCols) ? parsed.hiddenCols : [];
+                    appData.scoreCalcFields = Object.assign(
+                        { hw1: true, hw2: true, hw3: true, ea1: true, oral: false },
+                        parsed.scoreCalcFields || {}
+                    );
+                    appData.groups = Array.isArray(parsed.groups) && parsed.groups.length > 0 ? parsed.groups : defaultGroupsData();
+                } catch (e) {
+                    appData.groups = defaultGroupsData();
+                }
+            } else {
+                appData.groups = defaultGroupsData();
+            }
+            document.getElementById('global-topic-select').value = appData.globalTopicId || 't15';
+        }
+
+        function saveState() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+        }
+
+        function resetDemoData() {
+            if (!confirm('確定要重置為預設範例資料嗎？目前已輸入的修改將會還原。')) return;
+            appData.globalTopicId = 't15';
+            appData.viewPreset = 'all';
+            appData.hiddenCols = [];
+            appData.scoreCalcFields = { hw1: true, hw2: true, hw3: true, ea1: true, oral: false };
+            appData.groups = defaultGroupsData();
+            document.getElementById('global-topic-select').value = 't15';
+            saveState();
+            syncUIFromState();
+            renderTable();
+        }
+
+        // ==================== 顯示欄位切換與單一欄位隱藏功能 ====================
+
+        function applyViewPreset(preset) {
+            appData.viewPreset = preset;
+            if (preset === 'all') {
+                // 全部 (1-18欄)
+                appData.hiddenCols = [];
+            } else if (preset === 'hw') {
+                // 平時功課 (1-12欄) -> 隱藏 13-18 欄
+                appData.hiddenCols = [13, 14, 15, 16, 17, 18];
+            } else if (preset === 'oral') {
+                // 口頭匯報 (1-7, 12-18欄) -> 隱藏 8-11 欄
+                appData.hiddenCols = [8, 9, 10, 11];
+            }
+            saveState();
+            syncUIFromState();
+        }
+
+        function toggleSingleColumn(colIdx) {
+            const pos = appData.hiddenCols.indexOf(colIdx);
+            if (pos > -1) {
+                appData.hiddenCols.splice(pos, 1);
+            } else {
+                appData.hiddenCols.push(colIdx);
+            }
+            appData.viewPreset = 'custom';
+            saveState();
+            syncUIFromState();
+        }
+
+        function toggleCustomColumnDrawer() {
+            const drawer = document.getElementById('custom-col-drawer');
+            drawer.classList.toggle('hidden');
+        }
+
+        function syncUIFromState() {
+            // 1. 動態寫入隱藏欄位 CSS
+            const styleEl = document.getElementById('dynamic-col-visibility-style');
+            let cssRules = appData.hiddenCols.map(idx => `.col-idx-${idx} { display: none !important; }`).join('\n');
+            // 若第1欄被隱藏，第2欄 sticky left 改為 0
+            if (appData.hiddenCols.includes(1)) {
+                cssRules += `\n.sticky-col-2 { left: 0px !important; }`;
+            }
+            styleEl.innerHTML = cssRules;
+
+            // 2. 更新檢視按鈕狀態
+            ['all', 'hw', 'oral'].forEach(mode => {
+                const btn = document.getElementById(`view-btn-${mode}`);
+                if (btn) {
+                    if (appData.viewPreset === mode) btn.classList.add('active');
+                    else btn.classList.remove('active');
+                }
+            });
+
+            // 3. 更新隱藏欄位數量徽章
+            const badge = document.getElementById('hidden-col-badge');
+            if (badge) {
+                if (appData.hiddenCols.length > 0) {
+                    badge.textContent = `已隱藏 ${appData.hiddenCols.length} 欄`;
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+
+            // 4. 渲染 1-18 欄自訂開關按鈕
+            const container = document.getElementById('col-toggles-container');
+            if (container) {
+                container.innerHTML = columnDefinitions.map(col => {
+                    const isVisible = !appData.hiddenCols.includes(col.idx);
+                    return `
+                    <button type="button" onclick="toggleSingleColumn(${col.idx})"
+                        class="text-xs px-2.5 py-1 rounded border font-bold transition flex items-center gap-1 ${
+                            isVisible
+                                ? 'bg-slate-800 text-white border-slate-900'
+                                : 'bg-slate-100 text-slate-400 border-slate-300 line-through'
+                        }">
+                        <span>${isVisible ? '✓' : '✕'}</span>
+                        <span>${col.idx}. ${col.name}</span>
+                    </button>`;
+                }).join('');
+            }
+
+            // 5. 同步計分欄位核取方塊與第12欄公式提示
+            const fields = ['hw1', 'hw2', 'hw3', 'ea1', 'oral'];
+            fields.forEach(f => {
+                const topChk = document.getElementById(`score-chk-${f}`);
+                const thChk = document.getElementById(`th-chk-${f}`);
+                if (topChk) topChk.checked = !!appData.scoreCalcFields[f];
+                if (thChk) thChk.checked = !!appData.scoreCalcFields[f];
+            });
+
+            const activeColNums = [];
+            if (appData.scoreCalcFields.hw1) activeColNums.push('8');
+            if (appData.scoreCalcFields.hw2) activeColNums.push('9');
+            if (appData.scoreCalcFields.hw3) activeColNums.push('10');
+            if (appData.scoreCalcFields.ea1) activeColNums.push('11');
+            if (appData.scoreCalcFields.oral) activeColNums.push('17');
+
+            const hintEl = document.getElementById('subtotal-formula-hint');
+            if (hintEl) {
+                hintEl.textContent = activeColNums.length > 0
+                    ? `(計: 第${activeColNums.join(', ')}欄)`
+                    : `(未勾選計分欄)`;
+            }
+        }
+
+        // ==================== 根據選擇欄位計算分數功能 ====================
+
+        function toggleScoreCalcField(field, isChecked) {
+            appData.scoreCalcFields[field] = isChecked;
+            saveState();
+            syncUIFromState();
+            renderTable();
+        }
+
+        function syncScoreCalcWithVisibleCols() {
+            appData.scoreCalcFields.hw1 = !appData.hiddenCols.includes(8);
+            appData.scoreCalcFields.hw2 = !appData.hiddenCols.includes(9);
+            appData.scoreCalcFields.hw3 = !appData.hiddenCols.includes(10);
+            appData.scoreCalcFields.ea1 = !appData.hiddenCols.includes(11);
+            appData.scoreCalcFields.oral = !appData.hiddenCols.includes(17);
+            saveState();
+            syncUIFromState();
+            renderTable();
+        }
+
+        // 工具函數：計算單一學生「總分小計」（根據老師勾選的計分欄位動態計算）
+        function calcSubtotal(member) {
+            let total = 0;
+            const mapVX = { 'V': 3, 'X': -3, '補交': 2 };
+            const cfg = appData.scoreCalcFields || { hw1: true, hw2: true, hw3: true, ea1: true, oral: false };
+
+            if (cfg.hw1 && (member.hw1 in mapVX)) {
+                total += mapVX[member.hw1];
+            }
+            if (cfg.hw2 && (member.hw2 in mapVX)) {
+                total += mapVX[member.hw2];
+            }
+            if (cfg.hw3 && member.hw3 !== '' && !isNaN(Number(member.hw3))) {
+                total += Number(member.hw3);
+            }
+            if (cfg.ea1 && member.ea1 !== '' && !isNaN(Number(member.ea1))) {
+                total += Number(member.ea1);
+            }
+            if (cfg.oral && member.oralGrade) {
+                const matched = oralGrades.find(g => g.grade === member.oralGrade);
+                if (matched && matched.score !== '') {
+                    total += Number(matched.score);
+                }
+            }
+            return total;
+        }
+
+        // 工具函數：取得題目物件
+        function getTopicObj(topicId) {
+            return topicsList.find(t => t.id === topicId) || topicsList[0];
+        }
+
+        // 工具函數：第7欄自動生成中心論點
+        function buildCentralThesis(group) {
+            const topicObj = getTopicObj(group.topicId);
+            const product = (group.product || '').trim() || '（請輸入參賽作品）';
+            const subPoints = group.members
+                .map((m, idx) => (m.subPoint || '').trim() || `（分論點${cnNums[idx]}）`)
+                .join('、');
+            return `中心論點：${product}在${subPoints}幾方面表現卓越，值得獲得《${topicObj.title}》`;
+        }
+
+        // 工具函數：日期加上星期幾
+        function formatDateWithWeekday(dateStr) {
+            if (!dateStr) return '';
+            const parts = dateStr.split('-');
+            if (parts.length !== 3) return '';
+            const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+            if (isNaN(d.getTime())) return '';
+            const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+            return `${Number(parts[2])}/${Number(parts[1])}/${parts[0]} (${weekdays[d.getDay()]})`;
+        }
+
+        // 工具函數：根據第13欄日期與第14欄時間自動生成第15欄評核順序 (1, 2, 3...)
+        function computePresentationOrderMap() {
+            const entries = [];
+            appData.groups.forEach((g, gIdx) => {
+                g.members.forEach((m, mIdx) => {
+                    if (m.evalDate || m.evalTime) {
+                        const dateKey = m.evalDate || '9999-12-31';
+                        const timeKey = m.evalTime || '23:59';
+                        entries.push({
+                            key: `${gIdx}_${mIdx}`,
+                            gIdx,
+                            mIdx,
+                            sortStr: `${dateKey}T${timeKey}`
+                        });
+                    }
+                });
+            });
+
+            const uniqueTimeSlots = [...new Set(entries.map(e => `${e.gIdx}_${e.sortStr}`))];
+            uniqueTimeSlots.sort((a, b) => {
+                const timeA = a.split('_')[1];
+                const timeB = b.split('_')[1];
+                return timeA.localeCompare(timeB);
+            });
+
+            const slotRankMap = {};
+            uniqueTimeSlots.forEach((slot, i) => {
+                slotRankMap[slot] = i + 1;
+            });
+
+            const resultMap = {};
+            entries.forEach(e => {
+                resultMap[e.key] = slotRankMap[`${e.gIdx}_${e.sortStr}`];
+            });
+            return resultMap;
+        }
+
+        // ==================== 智慧解析並貼上整組/多行學生姓名 ====================
+        function parsePastedStudentLines(rawText) {
+            if (!rawText) return [];
+            let text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+            let rawParts = text.split(/[\n\t]+/).map(s => s.trim()).filter(Boolean);
+
+            if (rawParts.length === 1) {
+                if (/[、，,;；\/]/.test(rawParts[0])) {
+                    rawParts = rawParts[0].split(/[、，,;；\/]+/).map(s => s.trim()).filter(Boolean);
+                } else if (/\s+/.test(rawParts[0])) {
+                    rawParts = rawParts[0].split(/\s+/).map(s => s.trim()).filter(Boolean);
+                }
+            }
+
+            return rawParts.map(item => {
+                let cleaned = item.replace(/^\d+[\.\、\)\s]+/, '').trim();
+                let name = cleaned;
+                let subPoint = '';
+                const match = cleaned.match(/^([^\(\（]+)[\(\（]([^\)\）]+)[\)\）]$/);
+                if (match) {
+                    name = match[1].trim();
+                    subPoint = match[2].trim();
+                }
+                return { name, subPoint };
+            }).filter(x => x.name);
+        }
+
+        function handleStudentNamePaste(event, gIdx, mIdx) {
+            const clipboardData = event.clipboardData || window.clipboardData;
+            if (!clipboardData) return;
+            const pastedText = clipboardData.getData('text');
+            if (!pastedText) return;
+
+            const parsedList = parsePastedStudentLines(pastedText);
+            if (parsedList.length > 1 || (parsedList.length === 1 && parsedList[0].subPoint)) {
+                event.preventDefault();
+                applyParsedStudentsToGroup(gIdx, mIdx, parsedList);
+            }
+        }
+
+        function applyParsedStudentsToGroup(gIdx, startMIdx, parsedList) {
+            const group = appData.groups[gIdx];
+            const topicObj = getTopicObj(group.topicId);
+            const neededCount = Math.min(4, startMIdx + parsedList.length);
+
+            while (group.members.length < neededCount) {
+                const ref = group.members[group.members.length - 1] || {};
+                group.members.push({
+                    name: '',
+                    criteria: topicObj.opts[0] || '',
+                    subPoint: '',
+                    hw1: 'V',
+                    hw2: 'V',
+                    hw3: '3',
+                    ea1: '8',
+                    evalDate: ref.evalDate || '',
+                    evalTime: ref.evalTime || '',
+                    venue: ref.venue || 'LW885',
+                    oralGrade: '',
+                    oralNote: ''
+                });
+            }
+
+            if (startMIdx === 0 && parsedList.length >= 1 && parsedList.length <= 4) {
+                group.members.length = parsedList.length;
+            }
+
+            parsedList.forEach((item, idx) => {
+                const targetIdx = startMIdx + idx;
+                if (targetIdx < 4 && group.members[targetIdx]) {
+                    group.members[targetIdx].name = item.name;
+                    if (item.subPoint) {
+                        group.members[targetIdx].subPoint = item.subPoint;
+                    }
+                }
+            });
+
+            saveState();
+            renderTable();
+        }
+
+        function openGroupPasteModal(gIdx) {
+            activePasteGroupIdx = gIdx;
+            const g = appData.groups[gIdx];
+            document.getElementById('paste-modal-title').innerText = `📋 貼上【${g.groupName}】組員姓名（自動放入各空格）`;
+            document.getElementById('paste-modal-mode-desc').innerHTML = `
+                💡 <b>單組快速貼上模式</b>：請直接貼上 <b>${g.groupName}</b> 的 1 至 4 位組員姓名（可每行一人，或用頓號 <code>、</code> 逗號 <code>，</code> 空格分隔）。<br>
+                系統會<b>自動調整本組人數</b>並依序填入第 1 至 4 格！若連同括號貼上如 <code>謝理基(功能全面)</code>，更會自動填入第 6 欄「分論點」！
+            `;
+            const currentLines = g.members.map(m => m.subPoint ? `${m.name}(${m.subPoint})` : m.name).filter(Boolean).join('\n');
+            document.getElementById('paste-roster-textarea').value = currentLines;
+            const modal = document.getElementById('paste-roster-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => document.getElementById('paste-roster-textarea').focus(), 50);
+        }
+
+        function openBatchRosterModal() {
+            activePasteGroupIdx = null;
+            document.getElementById('paste-modal-title').innerText = `📋 批量貼上全班／多組名單`;
+            document.getElementById('paste-modal-mode-desc').innerHTML = `
+                💡 <b>全班多組批量匯入模式</b>：<br>
+                • <b>方式 A（以空行分組）</b>：每組之間留一行空白，每行一位組員姓名。<br>
+                • <b>方式 B（每行一組）</b>：每一行代表一組，組員之間以空格、Tab、頓號或逗號分隔（例如：<code>謝理基 梁經緯 常栢榮</code>）。<br>
+                系統會自動依序填入各組並自動調整每組人數（1–4人）！
+            `;
+            document.getElementById('paste-roster-textarea').value = '';
+            const modal = document.getElementById('paste-roster-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => document.getElementById('paste-roster-textarea').focus(), 50);
+        }
+
+        function closePasteRosterModal() {
+            const modal = document.getElementById('paste-roster-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function confirmPasteRoster() {
+            const raw = document.getElementById('paste-roster-textarea').value.trim();
+            if (!raw) {
+                alert('請先貼上學生姓名！');
+                return;
+            }
+
+            if (activePasteGroupIdx !== null) {
+                const parsed = parsePastedStudentLines(raw);
+                if (parsed.length === 0) return;
+                applyParsedStudentsToGroup(activePasteGroupIdx, 0, parsed.slice(0, 4));
+                closePasteRosterModal();
+            } else {
+                let groupBlocks = [];
+                if (/\n\s*\n/.test(raw)) {
+                    groupBlocks = raw.split(/\n\s*\n/).map(b => parsePastedStudentLines(b)).filter(b => b.length > 0);
+                } else {
+                    const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                    const multiPerLine = lines.some(l => /[、，,;；\t]/.test(l) || l.split(/\s+/).length >= 2);
+                    if (multiPerLine) {
+                        groupBlocks = lines.map(l => parsePastedStudentLines(l)).filter(b => b.length > 0);
+                    } else {
+                        const allStudents = parsePastedStudentLines(raw);
+                        for (let i = 0; i < allStudents.length; i += 4) {
+                            groupBlocks.push(allStudents.slice(i, i + 4));
+                        }
+                    }
+                }
+
+                const cnGroupNums = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四', '十五'];
+                groupBlocks.forEach((students, idx) => {
+                    if (!appData.groups[idx]) {
+                        const gTitle = cnGroupNums[idx] ? `第${cnGroupNums[idx]}組` : `第${idx + 1}組`;
+                        appData.groups.push({
+                            id: 'g_' + Date.now() + '_' + idx,
+                            groupName: gTitle,
+                            topicId: appData.globalTopicId,
+                            product: '',
+                            members: []
+                        });
+                    }
+                    const g = appData.groups[idx];
+                    const topicObj = getTopicObj(g.topicId);
+                    const sliced = students.slice(0, 4);
+                    while (g.members.length < sliced.length) {
+                        const ref = g.members[0] || {};
+                        g.members.push({
+                            name: '',
+                            criteria: topicObj.opts[g.members.length % topicObj.opts.length] || '',
+                            subPoint: '',
+                            hw1: 'V',
+                            hw2: 'V',
+                            hw3: '3',
+                            ea1: '8',
+                            evalDate: ref.evalDate || '2026-06-13',
+                            evalTime: ref.evalTime || '',
+                            venue: ref.venue || 'LW885',
+                            oralGrade: '',
+                            oralNote: ''
+                        });
+                    }
+                    g.members.length = sliced.length;
+                    sliced.forEach((st, mIdx) => {
+                        g.members[mIdx].name = st.name;
+                        if (st.subPoint) g.members[mIdx].subPoint = st.subPoint;
+                    });
+                });
+
+                saveState();
+                renderTable();
+                closePasteRosterModal();
+            }
+        }
+
+        // 渲染 18 欄主表格
+        function renderTable() {
+            const tbody = document.getElementById('table-body');
+            const orderMap = computePresentationOrderMap();
+            let html = '';
+
+            appData.groups.forEach((group, gIdx) => {
+                const mCount = group.members.length;
+                const topicObj = getTopicObj(group.topicId);
+                const centralThesis = buildCentralThesis(group);
+
+                group.members.forEach((member, mIdx) => {
+                    const isFirst = mIdx === 0;
+                    const isLast = mIdx === mCount - 1;
+                    const rowClass = `${isFirst ? 'group-first-row' : ''} ${isLast ? 'group-last-row' : ''} hover:bg-slate-50/80`;
+                    const subtotal = calcSubtotal(member);
+                    const subtotalColor = subtotal < 0 ? 'text-red-600' : 'text-blue-800';
+                    const orderNum = orderMap[`${gIdx}_${mIdx}`] || '-';
+                    const formattedDate = formatDateWithWeekday(member.evalDate);
+
+                    html += `<tr class="${rowClass}">`;
+
+                    // 第1欄：組別名稱 (rowspan)
+                    if (isFirst) {
+                        html += `
+                        <td rowspan="${mCount}" class="sticky-col-1 col-idx-1 text-center align-middle bg-white">
+                            <input type="text" value="${escapeHtml(group.groupName)}"
+                                oninput="updateGroupField(${gIdx}, 'groupName', this.value)"
+                                class="cell-input text-center font-black text-base text-black mb-1" />
+                            <div class="flex flex-col items-center gap-1 mt-1 no-print">
+                                <div class="flex items-center gap-1 text-[11px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-300">
+                                    <span class="text-slate-600 font-bold">人數:</span>
+                                    <select onchange="changeGroupSize(${gIdx}, Number(this.value))" class="bg-transparent font-black text-blue-800 focus:outline-none cursor-pointer">
+                                        ${[1, 2, 3, 4].map(n => `<option value="${n}" ${mCount === n ? 'selected' : ''}>${n}人</option>`).join('')}
+                                    </select>
+                                </div>
+                                <button onclick="openGroupPasteModal(${gIdx})" class="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-400 font-bold px-2 py-0.5 rounded shadow-2xs transition">
+                                    📋 貼上本組名單
+                                </button>
+                                <button onclick="removeGroup(${gIdx})" class="text-[11px] text-red-600 hover:underline mt-0.5">刪除本組</button>
+                            </div>
+                        </td>`;
+                    }
+
+                    // 第2欄：組員姓名
+                    const previewSub = member.subPoint ? `（${escapeHtml(member.subPoint)}）` : '';
+                    html += `
+                    <td class="sticky-col-2 col-idx-2 bg-white">
+                        <div class="flex items-center gap-1">
+                            <span class="text-xs font-bold text-slate-400 w-4 text-center">${mIdx + 1}</span>
+                            <input type="text" value="${escapeHtml(member.name)}" placeholder="輸入或直接貼上整組姓名"
+                                onpaste="handleStudentNamePaste(event, ${gIdx}, ${mIdx})"
+                                oninput="updateMemberField(${gIdx}, ${mIdx}, 'name', this.value)"
+                                class="cell-input font-bold text-black" />
+                        </div>
+                        <div class="text-[11px] txt-orange pl-5 truncate" id="name-sub-preview-${gIdx}-${mIdx}">${previewSub}</div>
+                    </td>`;
+
+                    // 第3欄：專題研習題目 (rowspan)
+                    if (isFirst) {
+                        html += `
+                        <td rowspan="${mCount}" class="col-idx-3 text-center align-middle bg-slate-50/50">
+                            <div class="text-xs text-slate-600 font-bold mb-1">甄選項目：</div>
+                            <select onchange="updateGroupTopic(${gIdx}, this.value)" class="cell-select txt-red text-xs">
+                                ${topicsList.map(t => `<option value="${t.id}" ${group.topicId === t.id ? 'selected' : ''}>${t.title}</option>`).join('')}
+                            </select>
+                        </td>`;
+                    }
+
+                    // 第4欄：參賽作品 (rowspan)
+                    if (isFirst) {
+                        html += `
+                        <td rowspan="${mCount}" class="col-idx-4 text-center align-middle">
+                            <input type="text" value="${escapeHtml(group.product)}" placeholder="請輸入參賽作品..."
+                                oninput="updateGroupProduct(${gIdx}, this.value)"
+                                class="cell-input text-center txt-blue text-sm" />
+                        </td>`;
+                    }
+
+                    // 第5欄：評審準則
+                    html += `
+                    <td class="col-idx-5">
+                        <select onchange="updateMemberCriteria(${gIdx}, ${mIdx}, this.value)" class="cell-select text-xs text-slate-800">
+                            <option value="">請選擇評審準則...</option>
+                            ${topicObj.opts.map(opt => `<option value="${escapeHtml(opt)}" ${member.criteria === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                        </select>
+                    </td>`;
+
+                    // 第6欄：分論點
+                    html += `
+                    <td class="col-idx-6">
+                        <div class="flex items-center gap-1">
+                            <span class="text-[11px] font-extrabold text-slate-600 whitespace-nowrap">分論點${cnNums[mIdx]}:</span>
+                            <input type="text" value="${escapeHtml(member.subPoint)}" placeholder="手動輸入分論點${cnNums[mIdx]}"
+                                oninput="updateMemberSubPoint(${gIdx}, ${mIdx}, this.value)"
+                                class="cell-input txt-orange text-xs" />
+                        </div>
+                    </td>`;
+
+                    // 第7欄：中心論點 (rowspan)
+                    if (isFirst) {
+                        html += `
+                        <td rowspan="${mCount}" class="col-idx-7 align-middle bg-emerald-50/30">
+                            <div id="central-thesis-${gIdx}" class="txt-green text-xs leading-relaxed p-1">
+                                ${escapeHtml(centralThesis)}
+                            </div>
+                        </td>`;
+                    }
+
+                    // 第8欄：課堂作業一
+                    html += `
+                    <td class="col-idx-8 text-center ${!appData.scoreCalcFields.hw1 ? 'opacity-50 bg-slate-100' : ''}">
+                        <select onchange="updateMemberScoreField(${gIdx}, ${mIdx}, 'hw1', this.value)"
+                            class="cell-select text-center text-xs ${getVXStyle(member.hw1)}">
+                            <option value="" ${member.hw1 === '' ? 'selected' : ''}>-</option>
+                            <option value="V" ${member.hw1 === 'V' ? 'selected' : ''}>✓ V (+3分)</option>
+                            <option value="X" ${member.hw1 === 'X' ? 'selected' : ''}>✗ X (-3分)</option>
+                            <option value="補交" ${member.hw1 === '補交' ? 'selected' : ''}>補交 (+2分)</option>
+                        </select>
+                    </td>`;
+
+                    // 第9欄：課堂作業二
+                    html += `
+                    <td class="col-idx-9 text-center ${!appData.scoreCalcFields.hw2 ? 'opacity-50 bg-slate-100' : ''}">
+                        <select onchange="updateMemberScoreField(${gIdx}, ${mIdx}, 'hw2', this.value)"
+                            class="cell-select text-center text-xs ${getVXStyle(member.hw2)}">
+                            <option value="" ${member.hw2 === '' ? 'selected' : ''}>-</option>
+                            <option value="V" ${member.hw2 === 'V' ? 'selected' : ''}>✓ V (+3分)</option>
+                            <option value="X" ${member.hw2 === 'X' ? 'selected' : ''}>✗ X (-3分)</option>
+                            <option value="補交" ${member.hw2 === '補交' ? 'selected' : ''}>補交 (+2分)</option>
+                        </select>
+                    </td>`;
+
+                    // 第10欄：課堂作業三
+                    html += `
+                    <td class="col-idx-10 text-center ${!appData.scoreCalcFields.hw3 ? 'opacity-50 bg-slate-100' : ''}">
+                        <select onchange="updateMemberScoreField(${gIdx}, ${mIdx}, 'hw3', this.value)" class="cell-select text-center text-xs">
+                            <option value="" ${member.hw3 === '' ? 'selected' : ''}>-</option>
+                            ${[0, 1, 2, 3, 4].map(s => `<option value="${s}" ${String(member.hw3) === String(s) ? 'selected' : ''}>${s} 分</option>`).join('')}
+                        </select>
+                    </td>`;
+
+                    // 第11欄：小組初稿 EA1
+                    html += `
+                    <td class="col-idx-11 text-center ${!appData.scoreCalcFields.ea1 ? 'opacity-50 bg-slate-100' : ''}">
+                        <select onchange="updateMemberScoreField(${gIdx}, ${mIdx}, 'ea1', this.value)" class="cell-select text-center text-xs">
+                            <option value="" ${member.ea1 === '' ? 'selected' : ''}>-</option>
+                            ${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(s => `<option value="${s}" ${String(member.ea1) === String(s) ? 'selected' : ''}>${s} 分</option>`).join('')}
+                        </select>
+                    </td>`;
+
+                    // 第12欄：總分小計
+                    html += `
+                    <td class="col-idx-12 text-center bg-blue-50/40">
+                        <span id="subtotal-${gIdx}-${mIdx}" class="font-black text-base ${subtotalColor}">${subtotal}</span>
+                        <span class="text-[11px] text-slate-500">分</span>
+                    </td>`;
+
+                    // 第13欄：評核日期
+                    html += `
+                    <td class="col-idx-13 text-center">
+                        <input type="date" value="${escapeHtml(member.evalDate)}"
+                            onchange="updateMemberSchedule(${gIdx}, ${mIdx}, 'evalDate', this.value)"
+                            class="border border-slate-300 rounded px-1.5 py-0.5 text-xs font-bold w-full" />
+                        <div class="text-[11px] txt-red mt-0.5">${formattedDate}</div>
+                    </td>`;
+
+                    // 第14欄：評核時間
+                    html += `
+                    <td class="col-idx-14 text-center">
+                        <input type="time" value="${escapeHtml(member.evalTime)}"
+                            onchange="updateMemberSchedule(${gIdx}, ${mIdx}, 'evalTime', this.value)"
+                            class="border border-slate-300 rounded px-1.5 py-0.5 text-xs font-bold w-full text-center" />
+                    </td>`;
+
+                    // 第15欄：評核順序
+                    html += `
+                    <td class="col-idx-15 text-center bg-amber-50/40">
+                        <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-800 text-white font-black text-xs">
+                            ${orderNum}
+                        </span>
+                    </td>`;
+
+                    // 第16欄：評核地點
+                    html += `
+                    <td class="col-idx-16 text-center">
+                        <input type="text" value="${escapeHtml(member.venue)}" placeholder="如 LW885"
+                            oninput="updateMemberField(${gIdx}, ${mIdx}, 'venue', this.value)"
+                            class="cell-input text-center txt-pink text-xs uppercase" />
+                    </td>`;
+
+                    // 第17欄：口頭匯報成績
+                    const matchedGrade = oralGrades.find(g => g.grade === member.oralGrade);
+                    const gradeScoreText = matchedGrade && matchedGrade.score !== '' ? `${matchedGrade.score} 分` : '';
+                    html += `
+                    <td class="col-idx-17 text-center ${appData.scoreCalcFields.oral ? 'bg-indigo-50/40' : ''}">
+                        <select onchange="updateMemberOralGrade(${gIdx}, ${mIdx}, this.value)" class="cell-select text-xs text-center font-black text-indigo-900">
+                            ${oralGrades.map(g => `<option value="${g.grade}" ${member.oralGrade === g.grade ? 'selected' : ''}>${g.label}</option>`).join('')}
+                        </select>
+                        <div id="oral-score-display-${gIdx}-${mIdx}" class="text-[11px] font-extrabold text-indigo-700 mt-0.5">${gradeScoreText}</div>
+                    </td>`;
+
+                    // 第18欄：口頭匯報紀錄
+                    const currentSpLabel = (member.subPoint || member.criteria || '未填分論點').trim();
+                    html += `
+                    <td class="col-idx-18 align-top">
+                        <div class="flex flex-wrap items-center justify-between gap-1 mb-1 no-print">
+                            <button onclick="openCommentModal(${gIdx}, ${mIdx})"
+                                class="bg-indigo-700 hover:bg-indigo-800 text-white text-[11px] font-bold px-2.5 py-1 rounded shadow-2xs flex items-center gap-1 transition">
+                                <span>🏷️</span> 針對「<span id="btn-sp-label-${gIdx}-${mIdx}">${escapeHtml(currentSpLabel)}</span>」評語庫
+                            </button>
+                            <div class="flex items-center gap-1">
+                                <button onclick="quickApplyPreset(${gIdx}, ${mIdx}, 'A')" class="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-1.5 py-0.5 rounded" title="套用優異評語(含分論點)">優異</button>
+                                <button onclick="quickApplyPreset(${gIdx}, ${mIdx}, 'B')" class="text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 font-bold px-1.5 py-0.5 rounded" title="套用良好評語(含分論點)">良好</button>
+                                <button onclick="quickApplyPreset(${gIdx}, ${mIdx}, 'C')" class="text-[10px] bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold px-1.5 py-0.5 rounded" title="套用一般評語(含分論點)">一般</button>
+                                <button onclick="quickApplyPreset(${gIdx}, ${mIdx}, 'D')" class="text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 font-bold px-1.5 py-0.5 rounded" title="套用待改善評語(含分論點)">待改善</button>
+                            </div>
+                        </div>
+                        <textarea rows="3" id="oral-note-input-${gIdx}-${mIdx}" placeholder="點擊上方「針對分論點評語庫」選取分層評語，或直接在此手動輸入匯報紀錄..."
+                            oninput="updateMemberField(${gIdx}, ${mIdx}, 'oralNote', this.value)"
+                            class="cell-input text-xs resize-y border border-slate-300 bg-slate-50/40 leading-relaxed">${escapeHtml(member.oralNote)}</textarea>
+                    </td>`;
+
+                    html += `</tr>`;
+                });
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        function getVXStyle(val) {
+            if (val === 'V') return 'text-emerald-700 bg-emerald-50 border-emerald-400';
+            if (val === 'X') return 'text-red-700 bg-red-50 border-red-400';
+            if (val === '補交') return 'text-amber-700 bg-amber-50 border-amber-400';
+            return 'text-slate-600';
+        }
+
+        // ==================== 彈出式評語庫視窗邏輯 ====================
+
+        function openCommentModal(gIdx, mIdx) {
+            activeModalTarget = { gIdx, mIdx };
+            const group = appData.groups[gIdx];
+            const member = group.members[mIdx];
+            const topicObj = getTopicObj(group.topicId);
+
+            document.getElementById('modal-group-badge').innerText = group.groupName;
+            document.getElementById('modal-student-title').innerText = `${member.name || '未填姓名'} — 口頭匯報評分準則與分論點針對性評語庫`;
+            document.getElementById('modal-context-info').innerText =
+                `專題題目：《${topicObj.title}》 ｜ 參賽作品：${group.product || '未填'} ｜ 評審準則：${member.criteria || '未選'} ｜ 負責分論點${cnNums[mIdx]}：${member.subPoint || '未填'}`;
+
+            document.getElementById('modal-comment-textarea').value = member.oralNote || '';
+
+            renderModalCommentChips();
+
+            const modal = document.getElementById('comment-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeCommentModal() {
+            const modal = document.getElementById('comment-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            activeModalTarget = { gIdx: null, mIdx: null };
+        }
+
+        function renderModalCommentChips() {
+            const { gIdx, mIdx } = activeModalTarget;
+            if (gIdx === null || mIdx === null) return;
+
+            const group = appData.groups[gIdx];
+            const member = group.members[mIdx];
+            const topicObj = getTopicObj(group.topicId);
+            const currentNote = member.oralNote || '';
+
+            const container = document.getElementById('modal-categories-container');
+            let html = '';
+
+            const spAnalysis = getSubPointSpecificComments(
+                topicObj.title,
+                group.product,
+                member.criteria,
+                member.subPoint
+            );
+
+            html += `
+            <div class="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-400 rounded-xl p-4 shadow-xs">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                    <div class="flex items-center gap-2">
+                        <span class="bg-amber-600 text-white text-xs font-black px-2.5 py-0.5 rounded-full">🎯 分論點針對性評語庫</span>
+                        <h4 class="font-black text-amber-950 text-sm">${escapeHtml(spAnalysis.dimensionName)}</h4>
+                    </div>
+                    <span class="text-[11px] font-bold text-amber-800">系統已自動分析該生的分論點「${escapeHtml(member.subPoint || member.criteria || '未填')}」生成以下針對性評語：</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                    ${spAnalysis.specificItems.map(item => {
+                        const isActive = currentNote.includes(item.text);
+                        return `
+                        <button type="button" onclick="toggleCommentSnippet(${escapeJsString(item.text)})"
+                            class="comment-chip ${isActive ? 'active' : ''} flex-col items-start! p-3!">
+                            <span class="text-[11px] font-black px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 mb-1">${escapeHtml(item.level)}｜${escapeHtml(item.tag)}</span>
+                            <span class="text-xs font-normal leading-relaxed">${escapeHtml(item.text)}</span>
+                        </button>`;
+                    }).join('')}
+                </div>
+            </div>`;
+
+            const contextualList = getTopicContextualComments(
+                topicObj.title,
+                group.product,
+                member.criteria,
+                member.subPoint
+            );
+
+            html += `
+            <div class="bg-indigo-50/70 border border-indigo-200 rounded-xl p-3.5">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="bg-indigo-700 text-white text-xs font-black px-2.5 py-0.5 rounded-full">📌 專題題目情境評語</span>
+                    <span class="text-xs font-bold text-indigo-950">結合《${escapeHtml(topicObj.title)}》與參賽作品「${escapeHtml(group.product || '參賽作品')}」：</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    ${contextualList.map(item => {
+                        const isActive = currentNote.includes(item.text);
+                        return `
+                        <button type="button" onclick="toggleCommentSnippet(${escapeJsString(item.text)})"
+                            class="comment-chip ${isActive ? 'active' : ''} flex-col items-start!">
+                            <span class="text-xs font-black underline">${escapeHtml(item.tag)}</span>
+                            <span class="text-xs font-normal opacity-95">${escapeHtml(item.text)}</span>
+                        </button>`;
+                    }).join('')}
+                </div>
+            </div>`;
+
+            baseRubricCategories.forEach(cat => {
+                html += `
+                <div class="bg-white border border-slate-300 rounded-xl p-3.5 shadow-2xs">
+                    <div class="flex items-center justify-between mb-2.5">
+                        <h4 class="font-black text-slate-900 text-sm flex items-center gap-2">
+                            <span class="px-2 py-0.5 text-xs rounded border font-extrabold ${cat.badgeColor}">${cat.title}</span>
+                        </h4>
+                        <span class="text-[11px] text-slate-500">點擊標籤即可加入或移除</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        ${cat.levels.map(lv => {
+                            const isActive = currentNote.includes(lv.text);
+                            return `
+                            <button type="button" onclick="toggleCommentSnippet(${escapeJsString(lv.text)})"
+                                class="comment-chip ${isActive ? 'active' : ''} flex-col items-start!">
+                                <div class="flex items-center justify-between w-full">
+                                    <span class="text-xs font-black">${escapeHtml(lv.level)}</span>
+                                    <span class="text-[11px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 font-bold">${escapeHtml(lv.tag)}</span>
+                                </div>
+                                <span class="text-xs font-normal mt-0.5">${escapeHtml(lv.text)}</span>
+                            </button>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function toggleCommentSnippet(snippet) {
+            const { gIdx, mIdx } = activeModalTarget;
+            if (gIdx === null || mIdx === null) return;
+
+            const member = appData.groups[gIdx].members[mIdx];
+            let current = (member.oralNote || '').trim();
+
+            if (current.includes(snippet)) {
+                current = current.replace(snippet, '').replace(/\s+/g, ' ').trim();
+            } else {
+                current = current ? `${current} ${snippet}` : snippet;
+            }
+
+            member.oralNote = current;
+            document.getElementById('modal-comment-textarea').value = current;
+            const tableInput = document.getElementById(`oral-note-input-${gIdx}-${mIdx}`);
+            if (tableInput) tableInput.value = current;
+
+            saveState();
+            renderModalCommentChips();
+        }
+
+        function handleModalTextareaInput(val) {
+            const { gIdx, mIdx } = activeModalTarget;
+            if (gIdx === null || mIdx === null) return;
+            appData.groups[gIdx].members[mIdx].oralNote = val;
+            const tableInput = document.getElementById(`oral-note-input-${gIdx}-${mIdx}`);
+            if (tableInput) tableInput.value = val;
+            saveState();
+            renderModalCommentChips();
+        }
+
+        function clearCurrentModalComments() {
+            const { gIdx, mIdx } = activeModalTarget;
+            if (gIdx === null || mIdx === null) return;
+            appData.groups[gIdx].members[mIdx].oralNote = '';
+            document.getElementById('modal-comment-textarea').value = '';
+            const tableInput = document.getElementById(`oral-note-input-${gIdx}-${mIdx}`);
+            if (tableInput) tableInput.value = '';
+            saveState();
+            renderModalCommentChips();
+        }
+
+        function buildPresetCommentForStudent(gIdx, mIdx, tier) {
+            const group = appData.groups[gIdx];
+            const member = group.members[mIdx];
+            const topicObj = getTopicObj(group.topicId);
+            const spAnalysis = getSubPointSpecificComments(
+                topicObj.title,
+                group.product,
+                member.criteria,
+                member.subPoint
+            );
+
+            const idxMap = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 };
+            const lvIdx = idxMap[tier] ?? 1;
+            const spIdx = tier === 'A' ? 0 : (tier === 'B' ? 1 : 2);
+
+            const parts = [
+                spAnalysis.specificItems[spIdx].text,
+                baseRubricCategories[0].levels[lvIdx].text,
+                baseRubricCategories[1].levels[lvIdx].text,
+                baseRubricCategories[2].levels[lvIdx].text,
+                baseRubricCategories[3].levels[lvIdx].text,
+                baseRubricCategories[4].levels[lvIdx].text,
+                baseRubricCategories[5].levels[lvIdx].text,
+                baseRubricCategories[6].levels[lvIdx].text
+            ];
+            return parts.join(' ');
+        }
+
+        function applySmartPreset(tier) {
+            const { gIdx, mIdx } = activeModalTarget;
+            if (gIdx === null || mIdx === null) return;
+            const text = buildPresetCommentForStudent(gIdx, mIdx, tier);
+            appData.groups[gIdx].members[mIdx].oralNote = text;
+            document.getElementById('modal-comment-textarea').value = text;
+            const tableInput = document.getElementById(`oral-note-input-${gIdx}-${mIdx}`);
+            if (tableInput) tableInput.value = text;
+            saveState();
+            renderModalCommentChips();
+        }
+
+        function quickApplyPreset(gIdx, mIdx, tier) {
+            const text = buildPresetCommentForStudent(gIdx, mIdx, tier);
+            appData.groups[gIdx].members[mIdx].oralNote = text;
+            const tableInput = document.getElementById(`oral-note-input-${gIdx}-${mIdx}`);
+            if (tableInput) tableInput.value = text;
+            saveState();
+        }
+
+        function copyGroupCooperationToAll() {
+            const { gIdx, mIdx } = activeModalTarget;
+            if (gIdx === null || mIdx === null) return;
+            const group = appData.groups[gIdx];
+            const currentNote = group.members[mIdx].oralNote || '';
+            const coopLevels = baseRubricCategories[6].levels;
+            const matchedCoop = coopLevels.find(lv => currentNote.includes(lv.text));
+
+            if (!matchedCoop) {
+                alert('請先在「7. 組員合作與互動表現」中點選一項評語，再同步套用至同組組員！');
+                return;
+            }
+
+            group.members.forEach((m, idx) => {
+                if (idx === mIdx) return;
+                let note = m.oralNote || '';
+                coopLevels.forEach(lv => {
+                    note = note.replace(lv.text, '').trim();
+                });
+                m.oralNote = note ? `${note} ${matchedCoop.text}` : matchedCoop.text;
+                const el = document.getElementById(`oral-note-input-${gIdx}-${idx}`);
+                if (el) el.value = m.oralNote;
+            });
+
+            saveState();
+            alert(`已將「${matchedCoop.tag}」評語同步套用至【${group.groupName}】所有組員！`);
+        }
+
+        // ==================== 欄位互動與即時更新事件 ====================
+
+        function handleGlobalTopicChange(topicId) {
+            appData.globalTopicId = topicId;
+            const topicObj = getTopicObj(topicId);
+            appData.groups.forEach(g => {
+                g.topicId = topicId;
+                g.members.forEach((m, i) => {
+                    if (!topicObj.opts.includes(m.criteria)) {
+                        m.criteria = topicObj.opts[i % topicObj.opts.length] || '';
+                    }
+                });
+            });
+            saveState();
+            renderTable();
+        }
+
+        function updateGroupTopic(gIdx, topicId) {
+            const group = appData.groups[gIdx];
+            group.topicId = topicId;
+            const topicObj = getTopicObj(topicId);
+            group.members.forEach((m, i) => {
+                if (!topicObj.opts.includes(m.criteria)) {
+                    m.criteria = topicObj.opts[i % topicObj.opts.length] || '';
+                }
+            });
+            saveState();
+            renderTable();
+        }
+
+        function updateGroupField(gIdx, field, val) {
+            appData.groups[gIdx][field] = val;
+            saveState();
+        }
+
+        function updateGroupProduct(gIdx, val) {
+            appData.groups[gIdx].product = val;
+            const thesisEl = document.getElementById(`central-thesis-${gIdx}`);
+            if (thesisEl) {
+                thesisEl.textContent = buildCentralThesis(appData.groups[gIdx]);
+            }
+            saveState();
+        }
+
+        function updateMemberField(gIdx, mIdx, field, val) {
+            appData.groups[gIdx].members[mIdx][field] = val;
+            saveState();
+        }
+
+        function updateMemberCriteria(gIdx, mIdx, val) {
+            const member = appData.groups[gIdx].members[mIdx];
+            member.criteria = val;
+            if (!member.subPoint) {
+                member.subPoint = val;
+                saveState();
+                renderTable();
+                return;
+            }
+            saveState();
+        }
+
+        function updateMemberSubPoint(gIdx, mIdx, val) {
+            appData.groups[gIdx].members[mIdx].subPoint = val;
+            const thesisEl = document.getElementById(`central-thesis-${gIdx}`);
+            if (thesisEl) {
+                thesisEl.textContent = buildCentralThesis(appData.groups[gIdx]);
+            }
+            const previewEl = document.getElementById(`name-sub-preview-${gIdx}-${mIdx}`);
+            if (previewEl) {
+                previewEl.textContent = val ? `（${val}）` : '';
+            }
+            const btnLabelEl = document.getElementById(`btn-sp-label-${gIdx}-${mIdx}`);
+            if (btnLabelEl) {
+                btnLabelEl.textContent = val || appData.groups[gIdx].members[mIdx].criteria || '未填分論點';
+            }
+            saveState();
+        }
+
+        function updateMemberScoreField(gIdx, mIdx, field, val) {
+            appData.groups[gIdx].members[mIdx][field] = val;
+            saveState();
+            renderTable();
+        }
+
+        function updateMemberSchedule(gIdx, mIdx, field, val) {
+            appData.groups[gIdx].members[mIdx][field] = val;
+            saveState();
+            renderTable();
+        }
+
+        function updateMemberOralGrade(gIdx, mIdx, val) {
+            appData.groups[gIdx].members[mIdx].oralGrade = val;
+            const matchedGrade = oralGrades.find(g => g.grade === val);
+            const scoreEl = document.getElementById(`oral-score-display-${gIdx}-${mIdx}`);
+            if (scoreEl) {
+                scoreEl.textContent = matchedGrade && matchedGrade.score !== '' ? `${matchedGrade.score} 分` : '';
+            }
+            // 若第17欄口頭匯報已納入第12欄總分小計，即時更新小計顯示
+            if (appData.scoreCalcFields.oral) {
+                const subEl = document.getElementById(`subtotal-${gIdx}-${mIdx}`);
+                if (subEl) {
+                    subEl.textContent = calcSubtotal(appData.groups[gIdx].members[mIdx]);
+                }
+            }
+            saveState();
+        }
+
+        function changeGroupSize(gIdx, newSize) {
+            const group = appData.groups[gIdx];
+            const currentSize = group.members.length;
+            const topicObj = getTopicObj(group.topicId);
+
+            if (newSize > currentSize) {
+                const refMember = group.members[currentSize - 1] || {};
+                for (let i = currentSize; i < newSize; i++) {
+                    group.members.push({
+                        name: '',
+                        criteria: topicObj.opts[i % topicObj.opts.length] || '',
+                        subPoint: '',
+                        hw1: 'V',
+                        hw2: 'V',
+                        hw3: '3',
+                        ea1: '8',
+                        evalDate: refMember.evalDate || '2026-06-13',
+                        evalTime: refMember.evalTime || '',
+                        venue: refMember.venue || 'LW885',
+                        oralGrade: '',
+                        oralNote: ''
+                    });
+                }
+            } else if (newSize < currentSize) {
+                group.members.splice(newSize);
+            }
+            saveState();
+            renderTable();
+        }
+
+        function addNewGroup() {
+            const nextNum = appData.groups.length + 1;
+            const cnGroupNums = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二'];
+            const gTitle = cnGroupNums[nextNum - 1] ? `第${cnGroupNums[nextNum - 1]}組` : `第${nextNum}組`;
+            const topicObj = getTopicObj(appData.globalTopicId);
+
+            appData.groups.push({
+                id: 'g_' + Date.now(),
+                groupName: gTitle,
+                topicId: appData.globalTopicId,
+                product: '',
+                members: [0, 1, 2].map(i => ({
+                    name: '',
+                    criteria: topicObj.opts[i % topicObj.opts.length] || '',
+                    subPoint: '',
+                    hw1: 'V',
+                    hw2: 'V',
+                    hw3: '3',
+                    ea1: '8',
+                    evalDate: '2026-06-13',
+                    evalTime: '',
+                    venue: 'LW885',
+                    oralGrade: '',
+                    oralNote: ''
+                }))
+            });
+            saveState();
+            renderTable();
+        }
+
+        function removeGroup(gIdx) {
+            if (appData.groups.length <= 1) {
+                alert('至少需保留一組！');
+                return;
+            }
+            if (!confirm(`確定要刪除「${appData.groups[gIdx].groupName}」嗎？`)) return;
+            appData.groups.splice(gIdx, 1);
+            saveState();
+            renderTable();
+        }
+
+        function batchSetTask(field, val) {
+            appData.groups.forEach(g => {
+                g.members.forEach(m => {
+                    m[field] = val;
+                });
+            });
+            saveState();
+            renderTable();
+        }
+
+        function batchSetDate(dateVal) {
+            if (!dateVal) return;
+            appData.groups.forEach(g => {
+                g.members.forEach(m => {
+                    m.evalDate = dateVal;
+                });
+            });
+            saveState();
+            renderTable();
+        }
+
+        function batchSetVenue(venueVal) {
+            if (!venueVal) return;
+            appData.groups.forEach(g => {
+                g.members.forEach(m => {
+                    m.venue = venueVal;
+                });
+            });
+            saveState();
+            renderTable();
+        }
+
+        // 匯出為 Excel (.xls)（自動跟隨目前顯示的欄位匯出）
+        function exportToExcel() {
+            const orderMap = computePresentationOrderMap();
+            const isVisible = (colIdx) => !appData.hiddenCols.includes(colIdx);
+
+            const headers = [
+                { idx: 1, title: '1. 組別名稱' },
+                { idx: 2, title: '2. 組員姓名' },
+                { idx: 3, title: '3. 專題研習題目' },
+                { idx: 4, title: '4. 參賽作品' },
+                { idx: 5, title: '5. 評審準則' },
+                { idx: 6, title: '6. 分論點' },
+                { idx: 7, title: '7. 中心論點' },
+                { idx: 8, title: '8. 課堂作業一(中心論點與分論點)' },
+                { idx: 9, title: '9. 課堂作業二(論據與搜集資料方法)' },
+                { idx: 10, title: '10. 課堂作業三(AI報告0-4分)' },
+                { idx: 11, title: '11. 小組初稿EA1(0-10分)' },
+                { idx: 12, title: '12. 總分小計' },
+                { idx: 13, title: '13. 評核日期EA' },
+                { idx: 14, title: '14. 評核時間' },
+                { idx: 15, title: '15. 評核順序' },
+                { idx: 16, title: '16. 評核地點' },
+                { idx: 17, title: '17. 口頭匯報成績' },
+                { idx: 18, title: '18. 口頭匯報紀錄' }
+            ];
+
+            let tableHtml = `
+            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    table { border-collapse: collapse; font-family: "PMingLiU", "Microsoft JhengHei", sans-serif; font-size: 11pt; }
+                    th { background-color: #b4d3e3; border: 1px solid #000; padding: 6px; font-weight: bold; text-align: center; }
+                    td { border: 1px solid #000; padding: 6px; vertical-align: middle; }
+                    .red { color: #c00000; font-weight: bold; }
+                    .blue { color: #0066cc; font-weight: bold; }
+                    .green { color: #008000; font-weight: bold; }
+                    .orange { color: #c55a11; font-weight: bold; }
+                </style>
+            </head>
+            <body>
+                <h2 style="text-align:center;">專題研習進度與評分紀錄</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            ${headers.filter(h => isVisible(h.idx)).map(h => `<th>${h.title}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+            appData.groups.forEach((group, gIdx) => {
+                const mCount = group.members.length;
+                const topicObj = getTopicObj(group.topicId);
+                const thesis = buildCentralThesis(group);
+
+                group.members.forEach((m, mIdx) => {
+                    const isFirst = mIdx === 0;
+                    const subtotal = calcSubtotal(m);
+                    const orderNum = orderMap[`${gIdx}_${mIdx}`] || '';
+                    const dateDisplay = formatDateWithWeekday(m.evalDate);
+                    const gradeObj = oralGrades.find(g => g.grade === m.oralGrade);
+                    const gradeDisplay = gradeObj && gradeObj.grade ? `${gradeObj.grade} (${gradeObj.score}分)` : '';
+
+                    tableHtml += `<tr>`;
+                    if (isFirst && isVisible(1)) {
+                        tableHtml += `<td rowspan="${mCount}" align="center"><b>${escapeHtml(group.groupName)}</b></td>`;
+                    }
+                    if (isVisible(2)) {
+                        tableHtml += `<td>${escapeHtml(m.name)} <span class="orange">${m.subPoint ? `(${escapeHtml(m.subPoint)})` : ''}</span></td>`;
+                    }
+                    if (isFirst && isVisible(3)) {
+                        tableHtml += `<td rowspan="${mCount}" align="center" class="red">${escapeHtml(topicObj.title)}</td>`;
+                    }
+                    if (isFirst && isVisible(4)) {
+                        tableHtml += `<td rowspan="${mCount}" align="center" class="blue">${escapeHtml(group.product)}</td>`;
+                    }
+                    if (isVisible(5)) tableHtml += `<td>${escapeHtml(m.criteria)}</td>`;
+                    if (isVisible(6)) tableHtml += `<td class="orange">分論點${cnNums[mIdx]}：${escapeHtml(m.subPoint)}</td>`;
+                    if (isFirst && isVisible(7)) {
+                        tableHtml += `<td rowspan="${mCount}" class="green">${escapeHtml(thesis)}</td>`;
+                    }
+                    if (isVisible(8)) tableHtml += `<td align="center">${escapeHtml(m.hw1)}</td>`;
+                    if (isVisible(9)) tableHtml += `<td align="center">${escapeHtml(m.hw2)}</td>`;
+                    if (isVisible(10)) tableHtml += `<td align="center">${escapeHtml(m.hw3)}</td>`;
+                    if (isVisible(11)) tableHtml += `<td align="center">${escapeHtml(m.ea1)}</td>`;
+                    if (isVisible(12)) tableHtml += `<td align="center"><b>${subtotal}</b></td>`;
+                    if (isVisible(13)) tableHtml += `<td align="center" class="red">${escapeHtml(dateDisplay)}</td>`;
+                    if (isVisible(14)) tableHtml += `<td align="center">${escapeHtml(m.evalTime)}</td>`;
+                    if (isVisible(15)) tableHtml += `<td align="center"><b>${orderNum}</b></td>`;
+                    if (isVisible(16)) tableHtml += `<td align="center">${escapeHtml(m.venue)}</td>`;
+                    if (isVisible(17)) tableHtml += `<td align="center"><b>${escapeHtml(gradeDisplay)}</b></td>`;
+                    if (isVisible(18)) tableHtml += `<td>${escapeHtml(m.oralNote)}</td>`;
+                    tableHtml += `</tr>`;
+                });
+            });
+
+            tableHtml += `</tbody></table></body></html>`;
+
+            const blob = new Blob(['\ufeff', tableHtml], { type: 'application/vnd.ms-excel' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `專題研習進度與評分紀錄.xls`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function escapeJsString(str) {
+            return "'" + String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+        }
+    </script>
+</body>
+</html>
